@@ -1,0 +1,30 @@
+[main]
+file_path = "default.xex"
+patched_file_path = "default_patched.xex"
+out_directory_path = "ppc"
+switch_table_file_path = "jumptbl.toml"
+
+skip_lr = false
+skip_msr = false
+ctr_as_local = false
+xer_as_local = false
+reserved_as_local = false
+cr_as_local = false
+non_argument_as_local = false
+non_volatile_as_local = false
+
+restgprlr_14_address = 0x82C8C460
+savegprlr_14_address = 0x82C8C410
+restfpr_14_address = 0x82C8F5CC
+savefpr_14_address = 0x82C8F580
+restvmx_14_address = 0x82C8F2E8
+savevmx_14_address = 0x82C8F050
+restvmx_64_address = 0x82C8F37C
+savevmx_64_address = 0x82C8F0E4
+
+longjmp_address = 0x82C871C0
+setjmp_address = 0x82CE0430
+
+invalid_instructions = []
+
+functions = []
