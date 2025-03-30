@@ -147,13 +147,6 @@ namespace Hooks
         owningThread.notify_one();
     }
 
-    DWORD Import_WaitForSingleObject(void *hHandle, unsigned int dwMilliseconds)
-    {
-        Log::Stub("WaitForSingleObject", "Called.");
-
-        return 0;
-    }
-
     void Import_KeWaitForMultipleObjects()
     {
         Log::Stub("KeWaitForMultipleObjects", "Called.");
@@ -261,39 +254,27 @@ namespace Hooks
         return STATUS_SUCCESS;
     }
 
-    NTSTATUS Import_NtWaitForSingleObjectEx(Event *evt, unsigned long timeoutMilliseconds)
+    uint32_t GuestTimeoutToMilliseconds(be<int64_t> *timeout)
     {
-        if (!evt)
-            return STATUS_UNSUCCESSFUL;
+        return timeout ? (*timeout * -1) / 10000 : INFINITE;
+    }
 
-        std::unique_lock lock(evt->mtx);
+    uint32_t Import_NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t> *Timeout)
+    {
+        uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
+        assert(timeout == 0 || timeout == INFINITE);
 
-        auto pred = [&]() -> bool
+        if (IsKernelObject(Handle))
         {
-            return evt->signaled.load(std::memory_order_acquire);
-        };
-
-        bool waitResult;
-
-        if (timeoutMilliseconds == INFINITE)
-        {
-            evt->cv.wait(lock, pred);
-            waitResult = true;
+            return GetKernelObject(Handle)->Wait(timeout);
         }
         else
         {
-            auto timeout = std::chrono::milliseconds(timeoutMilliseconds);
-            waitResult = evt->cv.wait_for(lock, timeout, pred);
+            assert(false && "Unrecognized handle value.");
         }
 
-        if (waitResult)
-        {
-            evt->signaled.store(false, std::memory_order_release);
-            return STATUS_SUCCESS;
-        }
-        return sSTATUS_TIMEOUT;
+        return STATUS_TIMEOUT;
     }
-    // --------------------------------------------------------------------------------
 
     void Import_KeLeaveCriticalRegion()
     {
@@ -412,5 +393,3 @@ GUEST_FUNCTION_HOOK(__imp__KeDelayExecutionThread, Hooks::Import_KeDelayExecutio
 GUEST_FUNCTION_HOOK(__imp__KeEnterCriticalRegion, Hooks::Import_KeEnterCriticalRegion)
 GUEST_FUNCTION_HOOK(__imp__KeSetEvent, Hooks::Import_KeSetEvent)
 GUEST_FUNCTION_HOOK(__imp__KeLeaveCriticalRegion, Hooks::Import_KeLeaveCriticalRegion)
-
-GUEST_FUNCTION_HOOK(__imp__WaitForSingleObject, Hooks::Import_WaitForSingleObject)
