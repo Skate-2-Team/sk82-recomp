@@ -216,12 +216,12 @@ namespace Hooks
 
 }
 
-// GUEST_FUNCTION_HOOK(sub_82101940, Hooks::Hooks_WriteFile)
-// GUEST_FUNCTION_HOOK(sub_82100BB8, Hooks::Hooks_ReadFile)
-// GUEST_FUNCTION_HOOK(sub_82100D40, Hooks::Hooks_CreateFileA)
-// GUEST_FUNCTION_HOOK(sub_82102B88, Hooks::Hooks_GetFileSizeEx)
-// GUEST_FUNCTION_HOOK(sub_821A7208, Hooks::Hooks_SetFilePointer)
-// GUEST_FUNCTION_HOOK(sub_82101B50, Hooks::Hooks_CreateDirectoryA)
+GUEST_FUNCTION_HOOK(sub_82C74A90, Hooks::Hooks_WriteFile)
+GUEST_FUNCTION_HOOK(sub_82C74908, Hooks::Hooks_ReadFile)
+GUEST_FUNCTION_HOOK(sub_82C74F90, Hooks::Hooks_CreateFileA)
+GUEST_FUNCTION_HOOK(sub_82C78A98, Hooks::Hooks_GetFileSizeEx)
+GUEST_FUNCTION_HOOK(sub_82C74C48, Hooks::Hooks_SetFilePointer)
+GUEST_FUNCTION_HOOK(sub_82C74BB8, Hooks::Hooks_CreateDirectoryA)
 
 GUEST_FUNCTION_HOOK(__imp__ObCreateSymbolicLink, Hooks::Import_ObCreateSymbolicLink)
 GUEST_FUNCTION_HOOK(__imp__ObDeleteSymbolicLink, Hooks::Import_ObDeleteSymbolicLink)

@@ -21,16 +21,232 @@ namespace Hooks
     // events
     enum NTSTATUS
     {
-        STATUS_SUCCESS = 0,
-        sSTATUS_TIMEOUT = 1,
-        STATUS_UNSUCCESSFUL = -1
+        NTSTATUS_SUCCESS = 0,
+        NTSTATUS_TIMEOUT = 1,
+        NTSTATUS_UNSUCCESSFUL = -1
     };
 
-    struct Event
-    { /* might need some more implementation :p */
-        std::atomic<bool> signaled{false};
+    struct Event final : KernelObject, HostObject<XKEVENT>
+    {
+        bool manualReset;
+        std::atomic<bool> signaled;
+
+        Event(XKEVENT *header)
+            : manualReset(!header->Type), signaled(!!header->SignalState)
+        {
+        }
+
+        Event(bool manualReset, bool initialState)
+            : manualReset(manualReset), signaled(initialState)
+        {
+        }
+
+        uint32_t Wait(uint32_t timeout) override
+        {
+            if (timeout == 0)
+            {
+                if (manualReset)
+                {
+                    if (!signaled)
+                        return STATUS_TIMEOUT;
+                }
+                else
+                {
+                    bool expected = true;
+                    if (!signaled.compare_exchange_strong(expected, false))
+                        return STATUS_TIMEOUT;
+                }
+            }
+            else if (timeout == INFINITE)
+            {
+                if (manualReset)
+                {
+                    signaled.wait(false);
+                }
+                else
+                {
+                    while (true)
+                    {
+                        bool expected = true;
+                        if (signaled.compare_exchange_weak(expected, false))
+                            break;
+
+                        signaled.wait(expected);
+                    }
+                }
+            }
+            else
+            {
+                assert(false && "Unhandled timeout value.");
+            }
+
+            return NTSTATUS_SUCCESS;
+        }
+
+        bool Set()
+        {
+            signaled = true;
+
+            if (manualReset)
+                signaled.notify_all();
+            else
+                signaled.notify_one();
+
+            return TRUE;
+        }
+
+        bool Reset()
+        {
+            signaled = false;
+            return TRUE;
+        }
+    };
+
+    struct Semaphore final : KernelObject, HostObject<XKSEMAPHORE>
+    {
+        std::atomic<uint32_t> count;
+        uint32_t maximumCount;
+
+        Semaphore(XKSEMAPHORE *semaphore)
+            : count(semaphore->Header.SignalState), maximumCount(semaphore->Limit)
+        {
+        }
+
+        Semaphore(uint32_t count, uint32_t maximumCount)
+            : count(count), maximumCount(maximumCount)
+        {
+        }
+
+        uint32_t Wait(uint32_t timeout) override
+        {
+            if (timeout == 0)
+            {
+                uint32_t currentCount = count.load();
+                if (currentCount != 0)
+                {
+                    if (count.compare_exchange_weak(currentCount, currentCount - 1))
+                        return NTSTATUS_SUCCESS;
+                }
+
+                return STATUS_TIMEOUT;
+            }
+            else if (timeout == INFINITE)
+            {
+                uint32_t currentCount;
+                while (true)
+                {
+                    currentCount = count.load();
+                    if (currentCount != 0)
+                    {
+                        if (count.compare_exchange_weak(currentCount, currentCount - 1))
+                            return NTSTATUS_SUCCESS;
+                    }
+                    else
+                    {
+                        count.wait(0);
+                    }
+                }
+
+                return NTSTATUS_SUCCESS;
+            }
+            else
+            {
+                assert(false && "Unhandled timeout value.");
+                return STATUS_TIMEOUT;
+            }
+        }
+
+        void Release(uint32_t releaseCount, uint32_t *previousCount)
+        {
+            if (previousCount != nullptr)
+                *previousCount = count;
+
+            assert(count + releaseCount <= maximumCount);
+
+            count += releaseCount;
+            count.notify_all();
+        }
+    };
+
+    struct Mutant final : KernelObject
+    {
         std::mutex mtx;
         std::condition_variable cv;
+
+        bool signaled;
+        uint32_t ownerThreadId;
+        uint32_t recursionCount;
+
+        Mutant(bool initialOwner)
+            : signaled(!initialOwner),
+              ownerThreadId(initialOwner ? GetCurrentThreadId() : 0),
+              recursionCount(initialOwner ? 1 : 0)
+        {
+        }
+
+        uint32_t Wait(uint32_t timeout) override
+        {
+            uint32_t currentThread = GetCurrentThreadId();
+            std::unique_lock<std::mutex> lock(mtx);
+
+            if (ownerThreadId == currentThread)
+            {
+                recursionCount++;
+                return NTSTATUS_SUCCESS;
+            }
+
+            if (timeout == 0)
+            {
+                if (!signaled)
+                    return STATUS_TIMEOUT;
+
+                signaled = false;
+                ownerThreadId = currentThread;
+                recursionCount = 1;
+                return NTSTATUS_SUCCESS;
+            }
+            else if (timeout == INFINITE)
+            {
+                cv.wait(lock, [this]()
+                        { return signaled; });
+
+                signaled = false;
+                ownerThreadId = currentThread;
+                recursionCount = 1;
+                return NTSTATUS_SUCCESS;
+            }
+            else
+            {
+                assert(false && "Unhandled timeout value.");
+                return STATUS_TIMEOUT;
+            }
+        }
+
+        bool Release()
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            uint32_t currentThread = GetCurrentThreadId();
+
+            if (ownerThreadId != currentThread)
+            {
+                Log::Error("Mutant::Release", "Thread ", currentThread, " attempted to release a mutant owned by thread ", ownerThreadId);
+                return false;
+            }
+
+            if (recursionCount > 1)
+            {
+                recursionCount--;
+            }
+            else
+            {
+                recursionCount = 0;
+                ownerThreadId = 0;
+                signaled = true;
+                cv.notify_one();
+            }
+
+            return true;
+        }
     };
 
     struct FileHandle : public KernelObject

@@ -4,6 +4,8 @@ namespace Hooks
 {
     void Hooks_RtlOutputDebugString(_STRING *p_outputString)
     {
+        Log::Info("Imports->RtlOutputDebugString", "Address is -> ", (void *)p_outputString);
+
         OutputDebugStringA((char *)p_outputString->Buffer);
 
         Log::Info("Imports->OutDebugString", p_outputString->Buffer);
@@ -20,7 +22,7 @@ namespace Hooks
         // But we already hook those, so we just need to set the heap to non-null
         // so the crt doesnt complain
 
-        int *XapiProcessHeap = Memory::Translate<int *>(0x824C0F74);
+        int *XapiProcessHeap = Memory::Translate<int *>(0x82E758E4);
 
         *XapiProcessHeap = 1;
     }
@@ -754,8 +756,10 @@ namespace Hooks
     }
 }
 
-// GUEST_FUNCTION_HOOK(sub_82102DC8, Hooks::Hooks_RtlOutputDebugString)
-// GUEST_FUNCTION_HOOK(sub_821030E8, Hooks::Hooks_XapiInitProcess)
+GUEST_FUNCTION_STUB(sub_82C69308) // NetTick
+
+GUEST_FUNCTION_HOOK(sub_82C72188, Hooks::Hooks_RtlOutputDebugString)
+GUEST_FUNCTION_HOOK(sub_82C7A598, Hooks::Hooks_XapiInitProcess)
 
 GUEST_FUNCTION_HOOK(__imp__XeCryptMd5Init, Hooks::Import_XeCryptMd5Init)
 GUEST_FUNCTION_HOOK(__imp__XeCryptMd5Update, Hooks::Import_XeCryptMd5Update)

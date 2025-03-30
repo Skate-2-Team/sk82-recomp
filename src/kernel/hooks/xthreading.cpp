@@ -2,6 +2,7 @@
 
 namespace Hooks
 {
+
     static uint32_t &KeTlsGetValueRef(size_t index)
     {
         thread_local std::vector<uint32_t> s_tlsValues;
@@ -162,9 +163,22 @@ namespace Hooks
         Log::Stub("KeReleaseSemaphore", "Called.");
     }
 
-    void Import_RtlTryEnterCriticalSection()
+    bool Import_RtlTryEnterCriticalSection(XRTL_CRITICAL_SECTION *cs)
     {
-        Log::Stub("RtlTryEnterCriticalSection", "Called.");
+        uint32_t thisThread = PPCLocal::g_ppcContext->r13.u32;
+        assert(thisThread != NULL);
+
+        std::atomic_ref owningThread(cs->OwningThread);
+
+        uint32_t previousOwner = 0;
+
+        if (owningThread.compare_exchange_weak(previousOwner, thisThread) || previousOwner == thisThread)
+        {
+            cs->RecursionCount++;
+            return true;
+        }
+
+        return false;
     }
 
     void Import_KeTryToAcquireSpinLockAtRaisedIrql()
@@ -172,9 +186,14 @@ namespace Hooks
         Log::Stub("KeTryToAcquireSpinLockAtRaisedIrql", "Called.");
     }
 
-    void Import_RtlInitializeCriticalSection()
+    uint32_t Import_RtlInitializeCriticalSection(XRTL_CRITICAL_SECTION *cs)
     {
-        Log::Stub("RtlInitializeCriticalSection", "Called.");
+        cs->Header.Absolute = 0;
+        cs->LockCount = -1;
+        cs->RecursionCount = 0;
+        cs->OwningThread = 0;
+
+        return 0;
     }
 
     void Import_KeLockL2()
@@ -217,41 +236,22 @@ namespace Hooks
         Log::Stub("ExTerminateThread", "Called.");
     }
 
-    DWORD Import_NtCreateEvent(Event **evtOut)
+    uint32_t Import_NtCreateEvent(be<uint32_t> *handle, void *objAttributes, uint32_t eventType, uint32_t initialState)
     {
-        if (!evtOut)
-            return STATUS_UNSUCCESSFUL;
-        // Allocate and initialize the event object.
-        *evtOut = new Event();
-        return STATUS_SUCCESS;
+        *handle = GetKernelHandle(CreateKernelObject<Event>(!eventType, !!initialState));
+        return 0;
     }
 
-    DWORD Import_NtSetEvent(Event *evt, unsigned long *previousState = nullptr)
+    uint32_t Import_NtSetEvent(Event *handle, uint32_t *previousState)
     {
-        if (!evt)
-            return STATUS_UNSUCCESSFUL;
-
-        // Lock the mutex to synchronize with waiters
-        std::lock_guard<std::mutex> lock(evt->mtx);
-        bool old = evt->signaled.exchange(true, std::memory_order_acq_rel);
-        if (previousState)
-            *previousState = old ? 1 : 0;
-
-        // Notify all waiting threads to check the predicate
-        evt->cv.notify_all(); // Or notify_one() for auto-reset behavior
-        return STATUS_SUCCESS;
+        handle->Set();
+        return 0;
     }
 
-    DWORD Import_NtClearEvent(Event *evt, unsigned long *previousState = nullptr)
+    uint32_t Import_NtClearEvent(Event *handle, uint32_t *previousState)
     {
-        if (!evt)
-            return STATUS_UNSUCCESSFUL;
-
-        std::lock_guard<std::mutex> lock(evt->mtx); // Optional but safe
-        bool old = evt->signaled.exchange(false, std::memory_order_acq_rel);
-        if (previousState)
-            *previousState = old ? 1 : 0;
-        return STATUS_SUCCESS;
+        handle->Reset();
+        return 0;
     }
 
     uint32_t GuestTimeoutToMilliseconds(be<int64_t> *timeout)
@@ -270,7 +270,8 @@ namespace Hooks
         }
         else
         {
-            assert(false && "Unrecognized handle value.");
+            Log::Error("NtWaitForSingleObjectEx", "Handle not recognized -> ", Handle);
+            DebugBreak();
         }
 
         return STATUS_TIMEOUT;
@@ -300,34 +301,46 @@ namespace Hooks
         Log::Stub("KeDelayExecutionThread", "Called.");
     }
 
-    void Import_NtReleaseMutant()
+    uint32_t Import_NtReleaseMutant(Mutant *handle)
     {
-        Log::Stub("NtReleaseMutant", "Called.");
+        handle->Release();
+        return NTSTATUS_SUCCESS;
     }
 
-    void Import_RtlInitializeCriticalSectionAndSpinCount()
+    void Import_RtlInitializeCriticalSectionAndSpinCount(XRTL_CRITICAL_SECTION *cs, uint32_t spinCount)
     {
-        Log::Stub("RtlInitializeCriticalSectionAndSpinCount", "Called.");
+        cs->Header.Absolute = (spinCount + 255) >> 8;
+        cs->LockCount = -1;
+        cs->RecursionCount = 0;
+        cs->OwningThread = 0;
     }
 
-    void Import_NtCreateMutant()
+    uint32_t Import_NtCreateMutant(be<uint32_t> *handle, void *objAttributes, uint32_t initialOwner)
     {
-        Log::Stub("NtCreateMutant", "Called.");
+        *handle = GetKernelHandle(CreateKernelObject<Mutant>(!!initialOwner));
+        return NTSTATUS_SUCCESS;
     }
 
-    void Import_NtCreateSemaphore()
+    uint32_t Import_NtCreateSemaphore(be<uint32_t> *Handle, XOBJECT_ATTRIBUTES *ObjectAttributes, uint32_t InitialCount, uint32_t MaximumCount)
     {
-        Log::Stub("NtCreateSemaphore", "Called.");
+        *Handle = GetKernelHandle(CreateKernelObject<Semaphore>(InitialCount, MaximumCount));
+        return NTSTATUS_SUCCESS;
+    }
+
+    uint32_t Import_NtReleaseSemaphore(Semaphore *Handle, uint32_t ReleaseCount, int32_t *PreviousCount)
+    {
+        uint32_t previousCount;
+        Handle->Release(ReleaseCount, &previousCount);
+
+        if (PreviousCount != nullptr)
+            *PreviousCount = ByteSwap(previousCount);
+
+        return NTSTATUS_SUCCESS;
     }
 
     void Import_NtCreateTimer()
     {
         Log::Stub("NtCreateTimer", "Called.");
-    }
-
-    void Import_NtReleaseSemaphore()
-    {
-        Log::Stub("NtReleaseSemaphore", "Called.");
     }
 
     void Import_NtSetTimerEx()

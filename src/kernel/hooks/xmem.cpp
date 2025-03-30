@@ -95,9 +95,61 @@ namespace Hooks
         Log::Stub("RtlCompareMemoryUlong", "Called.");
     }
 
-    void Import_MmQueryStatistics()
+    // If we don't implement this, the EA allocator tries to allocate 4gb of heap space
+    void Import_MmQueryStatistics(_MM_STATISTICS *statistics)
     {
-        Log::Stub("MmQueryStatistics", "Called.");
+        Log::Info("MmQueryStatistics", "Called.");
+
+        // Ensure the statistics pointer is valid
+        if (!statistics)
+        {
+            Log::Error("MmQueryStatistics", "Invalid statistics pointer.");
+            return;
+        }
+
+        statistics->Length = sizeof(_MM_STATISTICS);
+
+        // Total Physical Memory: 512MB
+        statistics->TotalPhysicalPages = 131072;
+
+        // Kernel Memory: 32MB
+        statistics->KernelPages = 8192;
+
+        // Title Available Memory: 256MB
+        statistics->TitleAvailablePages = 65536;
+        statistics->TitleTotalVirtualMemoryBytes = 536870912;    // 512MB
+        statistics->TitleReservedVirtualMemoryBytes = 134217728; // 128MB
+        // Title Physical Memory: 240MB
+        statistics->TitlePhysicalPages = 61440;
+
+        // Title Memory Breakdown
+        statistics->TitlePoolPages = 5120;     // 20MB
+        statistics->TitleStackPages = 2048;    // 8MB
+        statistics->TitleImagePages = 30720;   // 120MB
+        statistics->TitleHeapPages = 15360;    // 60MB
+        statistics->TitleVirtualPages = 4096;  // 16MB
+        statistics->TitlePageTablePages = 512; // 2MB
+        statistics->TitleCachePages = 3584;    // 14MB
+
+        // System Available Memory: 224MB
+        statistics->SystemAvailablePages = 57344;
+        statistics->SystemTotalVirtualMemoryBytes = 402653184;    // 384MB
+        statistics->SystemReservedVirtualMemoryBytes = 100663296; // 96MB
+
+        // System Physical Memory: 208MB
+        statistics->SystemPhysicalPages = 53248;
+
+        // System Memory Breakdown
+        statistics->SystemPoolPages = 10240;    // 40MB
+        statistics->SystemStackPages = 1024;    // 4MB
+        statistics->SystemImagePages = 22016;   // 86MB
+        statistics->SystemHeapPages = 8192;     // 32MB
+        statistics->SystemVirtualPages = 3072;  // 12MB
+        statistics->SystemPageTablePages = 512; // 2MB
+        statistics->SystemCachePages = 8192;    // 32MB
+
+        // Set the highest physical page (total RAM in pages - 1)
+        statistics->HighestPhysicalPage = statistics->TotalPhysicalPages - 1;
     }
 
     void Import_MmQueryAddressProtect()
@@ -131,10 +183,10 @@ namespace Hooks
     }
 }
 
-// GUEST_FUNCTION_HOOK(sub_82104F80, Hooks::Hooks_RtlAllocateHeap)
-// GUEST_FUNCTION_HOOK(sub_82105868, Hooks::Hooks_RtlFreeHeap)
-// GUEST_FUNCTION_HOOK(sub_82105B50, Hooks::Hooks_RtlReAllocateHeap)
-// GUEST_FUNCTION_HOOK(sub_82104218, Hooks::Hooks_RtlSizeHeap)
+GUEST_FUNCTION_HOOK(sub_82C77290, Hooks::Hooks_RtlAllocateHeap)
+GUEST_FUNCTION_HOOK(sub_82C77B60, Hooks::Hooks_RtlFreeHeap)
+GUEST_FUNCTION_HOOK(sub_82C77E50, Hooks::Hooks_RtlReAllocateHeap)
+GUEST_FUNCTION_HOOK(sub_82C76530, Hooks::Hooks_RtlSizeHeap)
 
 GUEST_FUNCTION_HOOK(__imp__ExAllocatePoolTypeWithTag, Hooks::Import_ExAllocatePoolTypeWithTag)
 GUEST_FUNCTION_HOOK(__imp__ExFreePool, Hooks::Import_ExFreePool)

@@ -12,6 +12,40 @@ labels = [
     0x823105B0,
 ]
 
+# EA::Allocator::NonLocalAllocator::SetOption
+[[switch]]
+base = 0x82A098C4
+r = 4
+default = 0x82A099A0
+labels = [
+    0x82A098FC,  # Case 0: Mutex creation handling
+    0x82A09928,  # Case 1: Set field_0x1A0 to 1
+    0x82A09944,  # Case 2: Set field_0x1 (byte) to 1 
+    0x82A09960,  # Case 3: Set field_0x2 (byte) to 1
+    0x82A0997C,  # Case 4: Set field_0x178 to 0x10
+    0x82A09998,  # Case 5: Set field_0x17C to 1
+]
+
+# EA::Allocator::GeneralAllocator::SetOption
+[[switch]]
+base = 0x82A04DE4
+r = 5
+default = 0x82A04FF8
+labels = [
+    0x82A04E30,  # Case 0: Mutex handling
+    0x82A04E94,  # Case 1: Boolean field_0x46D
+    0x82A04EA8,  # Case 2: field_0x4D8 handling
+    0x82A04EE4,  # Case 3: field_0x4DC handling
+    0x82A04F34,  # Case 4: Fast bin handling
+    0x82A04FAC,  # Case 5: field_0x4C8 assignment
+    0x82A04FB4,  # Case 6: field_0x4CC assignment
+    0x82A04FBC,  # Case 7: field_0x494 assignment
+    0x82A04FC4,  # Case 8: field_0x490 assignment
+    0x82A04FCC,  # Case 9: Boolean field_0x498
+    0x82A04FE0,  # Case 10: Boolean field_0x4E0
+    0x82A04FF4,  # Case 11: field_0x4B4 assignment
+]
+
 [[switch]]
 base = 0x823157D4
 r = 11
