@@ -4,8 +4,7 @@ namespace Hooks
 {
     static std::string ResolvePath(std::string fileName)
     {
-        // strip first 6 characters
-        fileName.erase(fileName.begin(), fileName.begin() + 6);
+        fileName.erase(fileName.begin(), fileName.begin() + 3);
 
         std::string fullPath = "game\\" + fileName;
 
@@ -48,11 +47,11 @@ namespace Hooks
 
         std::string fileName(lpFileName);
 
-        auto tempname = fileName.find("game:\\");
+        auto tempname = fileName.find("d:\\");
 
         if (tempname == std::string::npos)
         {
-            tempname = fileName.find("GAME:\\");
+            tempname = fileName.find("d:\\");
         }
 
         if (tempname == std::string::npos)
@@ -71,7 +70,7 @@ namespace Hooks
 
         if (handle == INVALID_HANDLE_VALUE)
         {
-            Log::Error("CreateFileA", "Failed to open file -> ", lpFileName);
+            Log::Error("CreateFileA", "Failed to open file -> ", actualPath);
             return GetInvalidKernelObject<FileHandle>();
         }
 
@@ -107,6 +106,7 @@ namespace Hooks
         DWORD bytesRead = 0;
         if (ReadFile(hFile->m_handle, buffer.data(), nNumberOfBytesToRead, &bytesRead, NULL))
         {
+            // change this to use std::move
             memcpy(lpBuffer, buffer.data(), bytesRead);
             return true;
         }
@@ -122,11 +122,11 @@ namespace Hooks
 
         std::string fileName(lpPathName);
 
-        auto tempname = fileName.find("game:\\");
+        auto tempname = fileName.find("d:\\");
 
         if (tempname == std::string::npos)
         {
-            tempname = fileName.find("GAME:\\");
+            tempname = fileName.find("d:\\");
         }
 
         if (tempname == std::string::npos) // not a game path
@@ -213,7 +213,6 @@ namespace Hooks
     {
         Log::Stub("IoDismountVolumeByFileHandle", "Called.");
     }
-
 }
 
 GUEST_FUNCTION_HOOK(sub_82C74A90, Hooks::Hooks_WriteFile)

@@ -36,14 +36,9 @@ namespace Hooks
         p_destination->Buffer = (unsigned char *)p_source;
     }
 
-    int Import_KeQueryPerformanceFrequency()
+    uint64_t Import_KeQueryPerformanceFrequency()
     {
-        LARGE_INTEGER frequency;
-
-        if (QueryPerformanceFrequency(&frequency))
-            return frequency.QuadPart;
-        else
-            return 0;
+        return 49875000;
     }
 
     uint32_t Import_ObReferenceObjectByHandle(uint32_t handle, uint32_t objectType, be<uint32_t> *object)
@@ -122,11 +117,6 @@ namespace Hooks
     void Import_RtlNtStatusToDosError()
     {
         Log::Stub("RtlNtStatusToDosError", "Called.");
-    }
-
-    void Import_NtDuplicateObject()
-    {
-        Log::Stub("NtDuplicateObject", "Called.");
     }
 
     void Import_RtlUnicodeToMultiByteN()
@@ -856,7 +846,6 @@ GUEST_FUNCTION_HOOK(__imp__XeKeysConsoleSignatureVerification, Hooks::Import_XeK
 GUEST_FUNCTION_HOOK(__imp___snprintf, Hooks::Import__snprintf)
 
 GUEST_FUNCTION_HOOK(__imp__NtDeviceIoControlFile, Hooks::Import_NtDeviceIoControlFile)
-GUEST_FUNCTION_HOOK(__imp__NtDuplicateObject, Hooks::Import_NtDuplicateObject)
 GUEST_FUNCTION_HOOK(__imp__NtClose, Hooks::Import_NtClose)
 
 GUEST_FUNCTION_HOOK(__imp__KeBugCheck, Hooks::Import_KeBugCheck)

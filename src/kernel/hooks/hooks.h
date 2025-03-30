@@ -249,6 +249,110 @@ namespace Hooks
         }
     };
 
+    struct Timer final : KernelObject
+    {
+        std::mutex mtx;
+        std::condition_variable cv;
+        bool signaled;
+        bool active;
+        uint32_t period;
+        std::chrono::steady_clock::time_point dueTime;
+
+        Timer(bool autoReset) : signaled(false), active(false), period(0) {}
+
+        uint32_t Wait(uint32_t timeout) override
+        {
+            std::unique_lock<std::mutex> lock(mtx);
+            if (timeout == 0)
+            {
+                if (!signaled)
+                    return STATUS_TIMEOUT;
+
+                signaled = false;
+                return NTSTATUS_SUCCESS;
+            }
+            else if (timeout == INFINITE)
+            {
+                cv.wait(lock, [this]()
+                        { return signaled; });
+
+                signaled = false;
+                return NTSTATUS_SUCCESS;
+            }
+            else
+            {
+                assert(false && "Unsupported timeout value");
+                return NTSTATUS_TIMEOUT;
+            }
+        }
+
+        void SetTimer(uint32_t dueTimeMs, uint32_t periodMs)
+        {
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                active = true;
+                period = periodMs;
+                if (dueTimeMs == 0)
+                {
+                    signaled = true;
+                    cv.notify_all();
+                }
+                else
+                {
+                    signaled = false;
+                    dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(dueTimeMs);
+                }
+            }
+
+            if (dueTimeMs > 0 || periodMs > 0)
+            {
+                std::thread([this, dueTimeMs, periodMs]
+                            {
+                    while (true)
+                    {
+                        std::unique_lock<std::mutex> lock(mtx);
+
+                        if (!active)
+                            break;
+
+                        if (dueTimeMs > 0)
+                        {
+                            cv.wait_until(lock, dueTime);
+                            if (!active)
+                                break;
+                        }
+
+                        signaled = true;
+                        cv.notify_all();
+
+                        if (periodMs == 0)
+                        {
+                            active = false;
+                            break;
+                        }
+
+                        dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(periodMs);
+                        signaled = false;
+                    } })
+                    .detach();
+            }
+        }
+
+        void CancelTimer()
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            active = false;
+            signaled = false;
+            cv.notify_all();
+        }
+
+        bool IsSignaled()
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            return signaled;
+        }
+    };
+
     struct FileHandle : public KernelObject
     {
         FileHandle(HANDLE handle) : m_handle(handle) {};

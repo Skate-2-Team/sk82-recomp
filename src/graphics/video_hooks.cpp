@@ -102,6 +102,6 @@ namespace VideoHooks
 
 }
 
-// GUEST_FUNCTION_HOOK(sub_82119680, VideoHooks::Direct3D_CreateDevice)
-// GUEST_FUNCTION_HOOK(sub_82117738, VideoHooks::D3DDevice_Swap)
+GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
+GUEST_FUNCTION_HOOK(sub_823A7C98, VideoHooks::D3DDevice_Swap)
 // GUEST_FUNCTION_HOOK(sub_8210E428, VideoHooks::D3DDevice_CreateSurface)

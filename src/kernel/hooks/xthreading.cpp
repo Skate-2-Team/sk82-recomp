@@ -262,7 +262,11 @@ namespace Hooks
     uint32_t Import_NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t> *Timeout)
     {
         uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
-        assert(timeout == 0 || timeout == INFINITE);
+
+        if (timeout != 0 && timeout != INFINITE)
+        {
+            return NTSTATUS_TIMEOUT;
+        }
 
         if (IsKernelObject(Handle))
         {
@@ -274,7 +278,7 @@ namespace Hooks
             DebugBreak();
         }
 
-        return STATUS_TIMEOUT;
+        return NTSTATUS_TIMEOUT;
     }
 
     void Import_KeLeaveCriticalRegion()
@@ -296,9 +300,23 @@ namespace Hooks
         Log::Stub("KeEnterCriticalRegion", "Called.");
     }
 
-    void Import_KeDelayExecutionThread()
+    uint32_t Import_KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int64_t> *Timeout)
     {
-        Log::Stub("KeDelayExecutionThread", "Called.");
+        if (Alertable)
+            return STATUS_USER_APC;
+
+        uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
+
+#ifdef _WIN32
+        Sleep(timeout);
+#else
+        if (timeout == 0)
+            std::this_thread::yield();
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
+#endif
+
+        return NTSTATUS_SUCCESS;
     }
 
     uint32_t Import_NtReleaseMutant(Mutant *handle)
@@ -338,14 +356,46 @@ namespace Hooks
         return NTSTATUS_SUCCESS;
     }
 
-    void Import_NtCreateTimer()
+    uint32_t Import_NtCreateTimer(be<uint32_t> *handle, void *objAttributes, uint32_t timerType)
     {
-        Log::Stub("NtCreateTimer", "Called.");
+        bool autoReset = (timerType != 0);
+
+        *handle = GetKernelHandle(CreateKernelObject<Timer>(autoReset));
+
+        return NTSTATUS_SUCCESS;
     }
 
-    void Import_NtSetTimerEx()
+    uint32_t Import_NtSetTimerEx(
+        Timer *timer,
+        const _LARGE_INTEGER *lpDueTime,
+        int unused1,
+        int unused2,
+        int unused3,
+        int unused4,
+        int lPeriod)
     {
-        Log::Stub("NtSetTimerEx", "Called.");
+        if (!timer)
+            return 0;
+
+        int64_t dueTime100ns = lpDueTime ? lpDueTime->QuadPart : 0;
+        uint32_t dueTimeMs = 0;
+
+        if (dueTime100ns < 0)
+            dueTimeMs = static_cast<uint32_t>((-dueTime100ns) / 10000);
+        else
+            dueTimeMs = 0;
+
+        timer->SetTimer(dueTimeMs, static_cast<uint32_t>(lPeriod));
+
+        return 0;
+    }
+
+    void Import_NtCancelTimer(Timer *timer)
+    {
+        if (!timer)
+            return;
+
+        timer->CancelTimer();
     }
 
     void Import_NtYieldExecution()
@@ -353,12 +403,13 @@ namespace Hooks
         Log::Stub("NtYieldExecution", "Called.");
     }
 
-    void Import_NtCancelTimer()
+    void Import_NtDuplicateObject()
     {
-        Log::Stub("NtCancelTimer", "Called.");
+        Log::Stub("NtDuplicateObject", "Called.");
     }
 }
 
+GUEST_FUNCTION_HOOK(__imp__NtDuplicateObject, Hooks::Import_NtDuplicateObject)
 GUEST_FUNCTION_HOOK(__imp__NtCancelTimer, Hooks::Import_NtCancelTimer)
 GUEST_FUNCTION_HOOK(__imp__NtCreateMutant, Hooks::Import_NtCreateMutant)
 GUEST_FUNCTION_HOOK(__imp__NtCreateSemaphore, Hooks::Import_NtCreateSemaphore)

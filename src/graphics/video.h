@@ -12,7 +12,7 @@ class Video
 public:
     const int m_screenWidth = 1280;
     const int m_screenHeight = 720;
-    const char *m_windowTitle = "Boom Boom Rocket - Recompilation";
+    const char *m_windowTitle = "Skate 2 - Recompilation";
 
     SDL_Window *m_window = nullptr;
     HWND m_hwnd = nullptr;

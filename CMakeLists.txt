@@ -60,6 +60,8 @@ add_executable(${TARGET_NAME}
 
     src/xex.h
 
+    src/patches.cpp
+
     src/ppc/ppc_func_mapping.cpp
 
     ${SOURCE_FILES} 
