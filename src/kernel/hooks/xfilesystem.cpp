@@ -55,6 +55,11 @@ namespace Hooks
             return GetInvalidKernelObject<FileHandle>();
         }
 
+        if (filePath.extension() == ".vp6")
+        {
+            DebugBreak();
+        }
+
         FileHandle *fileHandle = CreateKernelObject<FileHandle>();
         fileHandle->stream = std::move(fileStream);
         fileHandle->path = std::move(filePath);

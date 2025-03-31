@@ -2,6 +2,7 @@
 
 namespace Hooks
 {
+    static std::atomic<uint32_t> g_keSetEventGeneration;
 
     static uint32_t &KeTlsGetValueRef(size_t index)
     {
@@ -196,11 +197,44 @@ namespace Hooks
         Log::Stub("KeUnlockL2", "Called.");
     }
 
-    void Import_KeResetEvent()
+    bool Import_KeSetEvent(XKEVENT *pEvent, uint32_t Increment, bool Wait)
     {
-        Log::Stub("KeResetEvent", "Called.");
+        bool result = QueryKernelObject<Event>(*pEvent)->Set();
+
+        ++g_keSetEventGeneration;
+        g_keSetEventGeneration.notify_all();
+
+        return result;
     }
 
+    bool Import_KeResetEvent(XKEVENT *pEvent)
+    {
+        return QueryKernelObject<Event>(*pEvent)->Reset();
+    }
+
+    uint32_t Import_KeWaitForSingleObject(XDISPATCHER_HEADER *Object, uint32_t WaitReason, uint32_t WaitMode, bool Alertable, be<int64_t> *Timeout)
+    {
+        const uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
+        assert(timeout == INFINITE);
+
+        switch (Object->Type)
+        {
+        case 0:
+        case 1:
+            QueryKernelObject<Event>(*Object)->Wait(timeout);
+            break;
+
+        case 5:
+            QueryKernelObject<Semaphore>(*Object)->Wait(timeout);
+            break;
+
+        default:
+            assert(false && "Unrecognized kernel object type.");
+            return STATUS_TIMEOUT;
+        }
+
+        return NTSTATUS_SUCCESS;
+    }
     void Import_KeReleaseSpinLockFromRaisedIrql()
     {
         Log::Stub("KeReleaseSpinLockFromRaisedIrql", "Called.");
@@ -244,11 +278,6 @@ namespace Hooks
         return 0;
     }
 
-    uint32_t GuestTimeoutToMilliseconds(be<int64_t> *timeout)
-    {
-        return timeout ? (*timeout * -1) / 10000 : INFINITE;
-    }
-
     uint32_t Import_NtWaitForSingleObjectEx(uint32_t Handle, uint32_t WaitMode, uint32_t Alertable, be<int64_t> *Timeout)
     {
         uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
@@ -274,15 +303,6 @@ namespace Hooks
     void Import_KeLeaveCriticalRegion()
     {
         Log::Stub("KeLeaveCriticalRegion", "Called.");
-    }
-
-    void Import_KeSetEvent()
-    {
-        Log::Stub("KeSetEvent", "Called.");
-    }
-    void Import_KeWaitForSingleObject()
-    {
-        Log::Stub("KeWaitForSingleObject", "Called.");
     }
 
     void Import_KeEnterCriticalRegion()

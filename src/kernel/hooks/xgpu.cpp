@@ -10,7 +10,7 @@ namespace Hooks
         xvideoMode->fIsInterlaced = 0;
         xvideoMode->fIsWideScreen = 0;
         xvideoMode->fIsHiDef = 1;
-        xvideoMode->RefreshRate = 60.0f;
+        xvideoMode->RefreshRate = 0x42700000;
         xvideoMode->VideoStandard = 0;
     }
 
@@ -64,19 +64,16 @@ namespace Hooks
         Log::Stub("VdCallGraphicsNotificationRoutines", "Called.");
     }
 
-    void Import_VdQueryVideoMode()
-    {
-        Log::Stub("VdQueryVideoMode", "Called.");
-    }
-
     void Import_VdInitializeScalerCommandBuffer()
     {
         Log::Stub("VdInitializeScalerCommandBuffer", "Called.");
     }
 
-    void Import_VdRetrainEDRAM()
+    uint32_t Import_VdRetrainEDRAM()
     {
         Log::Stub("VdRetrainEDRAM", "Called.");
+
+        return 0;
     }
 
     void Import_VdRetrainEDRAMWorker()
@@ -124,7 +121,7 @@ GUEST_FUNCTION_HOOK(__imp__VdSetSystemCommandBufferGpuIdentifierAddress, Hooks::
 GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayGamma, Hooks::Import_VdGetCurrentDisplayGamma)
 GUEST_FUNCTION_HOOK(__imp__VdQueryVideoFlags, Hooks::Import_VdQueryVideoFlags)
 GUEST_FUNCTION_HOOK(__imp__VdCallGraphicsNotificationRoutines, Hooks::Import_VdCallGraphicsNotificationRoutines)
-GUEST_FUNCTION_HOOK(__imp__VdQueryVideoMode, Hooks::Import_VdQueryVideoMode)
+GUEST_FUNCTION_HOOK(__imp__VdQueryVideoMode, Hooks::Import_XGetVideoMode)
 GUEST_FUNCTION_HOOK(__imp__VdInitializeScalerCommandBuffer, Hooks::Import_VdInitializeScalerCommandBuffer)
 GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAM, Hooks::Import_VdRetrainEDRAM)
 GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAMWorker, Hooks::Import_VdRetrainEDRAMWorker)

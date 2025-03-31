@@ -27,7 +27,7 @@ namespace VideoHooks
         return 1;
     }
 
-    void *__fastcall D3DDevice_CreateSurface(unsigned int Width, unsigned int Height, _D3DFORMAT D3DFormat, _D3DMULTISAMPLE_TYPE MultiSample, const _D3DSURFACE_PARAMETERS *pParameters)
+    void *D3DDevice_CreateSurface(unsigned int Width, unsigned int Height, _D3DFORMAT D3DFormat, _D3DMULTISAMPLE_TYPE MultiSample, const _D3DSURFACE_PARAMETERS *pParameters)
     {
         Log::Info("VideoHooks", "D3DDevice_CreateSurface has been called -> ", Width, "x", Height, ", Format: 0x", D3DFormat);
 
@@ -78,8 +78,9 @@ namespace VideoHooks
 
     void ShowPixelBuffer(void *pPixelBuffer)
     {
-        g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
         g_video->WindowLoop();
+
+        g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
 
         /*
         auto frameEnd = std::chrono::steady_clock::now();
@@ -95,8 +96,48 @@ namespace VideoHooks
 
         Log::Info("ShowPixelBuffer", "Presented.");
     }
+
+    void D3DDevice_Clear(
+        void *pDevice,
+        unsigned int Count,
+        const D3DRectSwapped *pRects,
+        unsigned int Flags,
+        void *Color,
+        double Z,
+        unsigned int Stencil,
+        int EDRAMClear)
+    {
+        g_video->m_d3dDevice->Clear(Count, (_D3DRECT *)pRects, Flags, 0xFF000000, Z, Stencil);
+    }
+
+    void D3DDevice_ClearF(
+        void *pDevice,
+        unsigned int Flags,
+        unsigned __int64 pColor,
+        double Z,
+        void *Stencil)
+    {
+        g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
+    }
+
+    void *D3DDevice_BeginVertices(
+        void *pDevice,
+        void *PrimitiveType,
+        unsigned __int64 VertexStreamZeroStride)
+    {
+        Log::Info("VideoHooks", "D3DDevice_BeginVertices called: ", PrimitiveType, ", Stride: ", VertexStreamZeroStride);
+
+        // return a bit of memory for the vertices
+
+        // void *pVertices = g_heap->AllocPhysical(0x10000, 128); // 64k of memory for the vertices
+
+        return nullptr;
+    }
 }
 
 GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
 GUEST_FUNCTION_HOOK(sub_8232CFD0, VideoHooks::ShowPixelBuffer)
+GUEST_FUNCTION_HOOK(sub_82381BD0, VideoHooks::D3DDevice_Clear)
+GUEST_FUNCTION_HOOK(sub_82381AA8, VideoHooks::D3DDevice_ClearF)
+GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::D3DDevice_CreateTexture)
 // GUEST_FUNCTION_HOOK(sub_8210E428, VideoHooks::D3DDevice_CreateSurface)

@@ -12,6 +12,14 @@ namespace VideoHooks
     inline std::chrono::steady_clock::time_point m_frameStart;
     constexpr auto m_targetFrameTime = std::chrono::milliseconds(16); // Approx. 60 FPS
 
+    struct D3DRectSwapped
+    {
+        be<int> x1;
+        be<int> y1;
+        be<int> x2;
+        be<int> y2;
+    };
+
     HRESULT Direct3D_CreateDevice(
         unsigned int Adapter,
         int DeviceType,

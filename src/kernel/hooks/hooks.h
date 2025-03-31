@@ -376,6 +376,11 @@ namespace Hooks
         ~XamListener();
     };
 
+    inline uint32_t GuestTimeoutToMilliseconds(be<int64_t> *timeout)
+    {
+        return timeout ? (*timeout * -1) / 10000 : INFINITE;
+    }
+
     // global vars
     // threading
     inline std::vector<size_t> g_tlsFreeIndices;

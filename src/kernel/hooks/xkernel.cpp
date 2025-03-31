@@ -2,6 +2,7 @@
 
 namespace Hooks
 {
+
     void Hooks_RtlOutputDebugString(_STRING *p_outputString)
     {
         Log::Info("Imports->RtlOutputDebugString", "Address is -> ", (void *)p_outputString);

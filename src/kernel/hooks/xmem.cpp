@@ -70,6 +70,22 @@ namespace Hooks
         g_heap->Free(Memory::Translate(baseAddress));
     }
 
+    // First two args are always NULL every time this is called.
+    uint32_t Hooks_VirtualAllocEx(void *hProcess, void *lpAddress, unsigned int dwSize, unsigned int flAllocationType, unsigned int flProtect)
+    {
+        if (lpAddress != NULL)
+        {
+            Log::Error("VirtualAllocEx", "lpAddress is not NULL -> ", lpAddress);
+            return 0;
+        }
+
+        uint32_t address = Memory::MapVirtual(g_heap->Alloc(dwSize));
+
+        Log::Info("VirtualAllocEx", "Alloc -> ", dwSize, " bytes at ", (void *)address);
+
+        return address;
+    }
+
     void Import_NtQueryVirtualMemory()
     {
         Log::Stub("NtQueryVirtualMemory", "Called.");
@@ -77,7 +93,7 @@ namespace Hooks
 
     void Import_NtAllocateVirtualMemory()
     {
-        Log::Stub("NtAllocateVirtualMemory", "Called.");
+        Log::Info("NtAllocateVirtualMemory", "Called.");
     }
 
     void Import_NtFreeVirtualMemory()
@@ -183,6 +199,7 @@ namespace Hooks
     }
 }
 
+GUEST_FUNCTION_HOOK(sub_82C72B88, Hooks::Hooks_VirtualAllocEx)
 GUEST_FUNCTION_HOOK(sub_82C77290, Hooks::Hooks_RtlAllocateHeap)
 GUEST_FUNCTION_HOOK(sub_82C77B60, Hooks::Hooks_RtlFreeHeap)
 GUEST_FUNCTION_HOOK(sub_82C77E50, Hooks::Hooks_RtlReAllocateHeap)

@@ -17,6 +17,9 @@ namespace Memory
             }
 
             Log::Info("Kernel->Memory", "Memory has been allocated.");
+
+            DWORD oldProtect;
+            VirtualProtect(g_base, 4096, PAGE_NOACCESS, &oldProtect);
         }
 
         for (size_t i = 0; PPCFuncMappings[i].guest != 0; i++)
