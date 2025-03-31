@@ -139,6 +139,15 @@ struct _D3DSURFACE_PARAMETERS
     be<int> ColorExpBias;
 };
 
+typedef struct _XOVERLAPPED
+{
+    be<uint32_t> Internal;
+    be<uint32_t> InternalHigh;
+    be<uint32_t> Offset;
+    be<uint32_t> OffsetHigh;
+    be<uint32_t> hEvent;
+} XOVERLAPPED;
+
 struct _MM_STATISTICS
 {
     be<unsigned int> Length;
@@ -168,3 +177,110 @@ struct _MM_STATISTICS
     be<unsigned int> SystemCachePages;
     be<unsigned int> HighestPhysicalPage;
 };
+
+// Content types
+#define XCONTENTTYPE_SAVEDATA 1
+#define XCONTENTTYPE_DLC 2
+#define XCONTENTTYPE_RESERVED 3
+
+#define XCONTENT_NEW 1
+#define XCONTENT_EXISTING 2
+
+#define XCONTENT_MAX_DISPLAYNAME 128
+#define XCONTENT_MAX_FILENAME 42
+#define XCONTENTDEVICE_MAX_NAME 27
+
+#define MSG_AREA(msgid) (((msgid) >> 16) & 0xFFFF)
+
+typedef struct _XXOVERLAPPED
+{
+    union
+    {
+        struct
+        {
+            be<uint32_t> Error;
+            be<uint32_t> Length;
+        };
+
+        struct
+        {
+            uint32_t InternalLow;
+            uint32_t InternalHigh;
+        };
+    };
+    uint32_t InternalContext;
+    be<uint32_t> hEvent;
+    be<uint32_t> pCompletionRoutine;
+    be<uint32_t> dwCompletionContext;
+    be<uint32_t> dwExtendedError;
+} XXOVERLAPPED, *PXXOVERLAPPED;
+
+typedef struct _XCONTENT_DATA
+{
+    be<uint32_t> DeviceID;
+    be<uint32_t> dwContentType;
+    be<uint16_t> szDisplayName[XCONTENT_MAX_DISPLAYNAME];
+    char szFileName[XCONTENT_MAX_FILENAME];
+} XCONTENT_DATA, *PXCONTENT_DATA;
+
+typedef struct _XUSER_SIGNIN_INFO
+{
+    be<uint64_t> xuid;
+    be<uint32_t> dwField08;
+    be<uint32_t> SigninState;
+    be<uint32_t> dwField10;
+    be<uint32_t> dwField14;
+    char Name[16];
+} XUSER_SIGNIN_INFO;
+
+// Direct reflection of XInput structures
+
+#define XAMINPUT_DEVTYPE_GAMEPAD 0x01
+#define XAMINPUT_DEVSUBTYPE_GAMEPAD 0x01
+
+#define XAMINPUT_GAMEPAD_DPAD_UP 0x0001
+#define XAMINPUT_GAMEPAD_DPAD_DOWN 0x0002
+#define XAMINPUT_GAMEPAD_DPAD_LEFT 0x0004
+#define XAMINPUT_GAMEPAD_DPAD_RIGHT 0x0008
+#define XAMINPUT_GAMEPAD_START 0x0010
+#define XAMINPUT_GAMEPAD_BACK 0x0020
+#define XAMINPUT_GAMEPAD_LEFT_THUMB 0x0040
+#define XAMINPUT_GAMEPAD_RIGHT_THUMB 0x0080
+#define XAMINPUT_GAMEPAD_LEFT_SHOULDER 0x0100
+#define XAMINPUT_GAMEPAD_RIGHT_SHOULDER 0x0200
+#define XAMINPUT_GAMEPAD_A 0x1000
+#define XAMINPUT_GAMEPAD_B 0x2000
+#define XAMINPUT_GAMEPAD_X 0x4000
+#define XAMINPUT_GAMEPAD_Y 0x8000
+
+typedef struct _XAMINPUT_GAMEPAD
+{
+    uint16_t wButtons;
+    uint8_t bLeftTrigger;
+    uint8_t bRightTrigger;
+    int16_t sThumbLX;
+    int16_t sThumbLY;
+    int16_t sThumbRX;
+    int16_t sThumbRY;
+} XAMINPUT_GAMEPAD, *PXAMINPUT_GAMEPAD;
+
+typedef struct _XAMINPUT_VIBRATION
+{
+    uint16_t wLeftMotorSpeed;
+    uint16_t wRightMotorSpeed;
+} XAMINPUT_VIBRATION, *PXAMINPUT_VIBRATION;
+
+typedef struct _XAMINPUT_CAPABILITIES
+{
+    uint8_t Type;
+    uint8_t SubType;
+    uint16_t Flags;
+    XAMINPUT_GAMEPAD Gamepad;
+    XAMINPUT_VIBRATION Vibration;
+} XAMINPUT_CAPABILITIES, *PXAMINPUT_CAPABILITIES;
+
+typedef struct _XAMINPUT_STATE
+{
+    uint32_t dwPacketNumber;
+    XAMINPUT_GAMEPAD Gamepad;
+} XAMINPUT_STATE, *PXAMINPUT_STATE;

@@ -5,17 +5,9 @@
 #include "kernel/function.h"
 #include "xex.h"
 
-unsigned int Patch_GetTickCount()
+int InputPatch()
 {
-    LARGE_INTEGER tickCount;
-    QueryPerformanceCounter(&tickCount);
-
-    return static_cast<unsigned int>(tickCount.QuadPart / 10000);
-}
-
-int Sk8GetVersion()
-{
-    return 0;
+    return 1;
 }
 
 /*
@@ -25,20 +17,9 @@ This function waits for XBL connection, which obviously is never going to happen
 */
 GUEST_FUNCTION_STUB(sub_828CE738)
 
-/*
-Sk8::GetVersion
+// Lua lexer has issues, could potentially be because of missing opcodes
+GUEST_FUNCTION_STUB(sub_82B33D80) // Sk8::Challenge::cChallengeObjectivesManager::PerformLuaGlobalBinding
+GUEST_FUNCTION_STUB(sub_82896278) // ChallengeRuntime::cLuaStateManager::Init
 
-Tries to pull some sort of version file that doesn't exist in the retail build.
-*/
-GUEST_FUNCTION_HOOK(sub_824D8210, Sk8GetVersion)
-
-/*
-AttribSysUtils::cVaultManager::LoadAttributeSystemVault
-
-Tries to load some skater.vlt file that doesn't exist in the retail build.
-*/
-GUEST_FUNCTION_STUB(sub_828A2458)
-
-// GUEST_FUNCTION_STUB(sub_829F0F00) // rw::core::filesys::Device::Wait
-// GUEST_FUNCTION_STUB(sub_829F0A88) // rw::core::filesys::Device::InsertOp
-//  GUEST_FUNCTION_HOOK(sub_82C74580, Patch_GetTickCount)
+GUEST_FUNCTION_STUB(sub_82368818)             // xcore::XAllocator::Internal::CategoryAllocator::Free
+GUEST_FUNCTION_HOOK(sub_8231E2F0, InputPatch) // Sk8::Input::InputManager::LastInput

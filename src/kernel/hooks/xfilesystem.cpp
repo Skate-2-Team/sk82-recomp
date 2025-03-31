@@ -1,5 +1,10 @@
 #include "hooks.h"
 
+/*
+99% of this is from Unleashed Recompiled, all credits to the original authors <3
+https://github.com/hedge-dev/UnleashedRecomp/blob/main/UnleashedRecomp/kernel/io/file_system.cpp
+*/
+
 namespace Hooks
 {
     static std::string ResolvePath(std::string fileName)
@@ -11,111 +16,214 @@ namespace Hooks
         return fullPath;
     }
 
-    BOOL Hooks_GetFileSizeEx(FileHandle *hFile, _LARGE_INTEGER *lpFileSize)
+    FileHandle *Hooks_CreateFileA(
+        const char *lpFileName,
+        uint32_t dwDesiredAccess,
+        uint32_t dwShareMode,
+        void *lpSecurityAttributes,
+        uint32_t dwCreationDisposition,
+        uint32_t dwFlagsAndAttributes)
     {
-        if (!GetFileSizeEx(hFile->m_handle, lpFileSize))
-            return false;
+        assert(((dwDesiredAccess & ~(GENERIC_READ | GENERIC_WRITE | FILE_READ_DATA)) == 0) && "Unknown desired access bits.");
+        assert(((dwShareMode & ~(FILE_SHARE_READ | FILE_SHARE_WRITE)) == 0) && "Unknown share mode bits.");
+        assert(((dwCreationDisposition & ~(CREATE_NEW | CREATE_ALWAYS)) == 0) && "Unknown creation disposition bits.");
 
-        if (!lpFileSize)
-            return false;
+        std::filesystem::path filePath = ResolvePath(lpFileName);
 
-        Log::Info("GetFileSizeEx", "File size: ", lpFileSize->QuadPart);
+        Log::Info("CreateFileA", "Creating file -> ", filePath);
 
-        lpFileSize->QuadPart = ByteSwap(lpFileSize->QuadPart);
-
-        return true;
-    }
-
-    DWORD Hooks_SetFilePointer(FileHandle *hFile, LONG lDistance, PLONG lpDistanceToMoveHigh, DWORD dwMoveMethod)
-    {
-        return SetFilePointer(hFile->m_handle, lDistance, lpDistanceToMoveHigh, dwMoveMethod);
-    }
-
-    FileHandle *Hooks_CreateFileA(const char *lpFileName,
-                                  unsigned int dwDesiredAccess,
-                                  unsigned int dwShareMode,
-                                  void *lpSecurityAttributes,
-                                  unsigned int dwCreationDisposition,
-                                  unsigned int dwFlagsAndAttributes,
-                                  void *hTemplateFile)
-    {
-        if (dwFlagsAndAttributes & FILE_FLAG_OVERLAPPED) // no async
+        std::fstream fileStream;
+        std::ios::openmode fileOpenMode = std::ios::binary;
+        if (dwDesiredAccess & (GENERIC_READ | FILE_READ_DATA))
         {
-            Log::Error("CreateFileA", "Overlapped file access is not supported.");
+            fileOpenMode |= std::ios::in;
+        }
+
+        if (dwDesiredAccess & GENERIC_WRITE)
+        {
+            fileOpenMode |= std::ios::out;
+        }
+
+        fileStream.open(filePath, fileOpenMode);
+        if (!fileStream.is_open())
+        {
+            Log::Error("CreateFileA", "Failed to open file -> ", filePath);
+
+#ifdef _WIN32
+            GuestThread::SetLastError(GetLastError());
+#endif
             return GetInvalidKernelObject<FileHandle>();
         }
 
-        std::string fileName(lpFileName);
-
-        auto tempname = fileName.find("d:\\");
-
-        if (tempname == std::string::npos)
-        {
-            tempname = fileName.find("d:\\");
-        }
-
-        if (tempname == std::string::npos)
-        {
-            Log::Error("CreateFileA", "Returning INVALID_HANDLE_VALUE for -> ", lpFileName);
-
-            return GetInvalidKernelObject<FileHandle>();
-        }
-
-        std::string actualPath = ResolvePath(fileName);
-
-        auto handle = CreateFileA(
-            actualPath.c_str(), dwDesiredAccess,
-            dwShareMode, nullptr, dwCreationDisposition, dwFlagsAndAttributes,
-            nullptr);
-
-        if (handle == INVALID_HANDLE_VALUE)
-        {
-            Log::Error("CreateFileA", "Failed to open file -> ", actualPath);
-            return GetInvalidKernelObject<FileHandle>();
-        }
-
-        FileHandle *newHandle = CreateKernelObject<FileHandle>(handle);
-        newHandle->m_handle = handle;
-
-        Log::Info("CreateFileA", "Opening file -> ", lpFileName, ", handle is -> ", handle);
-
-        return newHandle;
+        FileHandle *fileHandle = CreateKernelObject<FileHandle>();
+        fileHandle->stream = std::move(fileStream);
+        fileHandle->path = std::move(filePath);
+        return fileHandle;
     }
 
-    BOOL Hooks_WriteFile(FileHandle *hFile,
-                         const void *lpBuffer,
-                         unsigned int nNumberOfBytesToWrite,
-                         unsigned int *lpNumberOfBytesWritten,
-                         _OVERLAPPED *lpOverlapped)
+    static uint32_t Hooks_GetFileSize(FileHandle *hFile, be<uint32_t> *lpFileSizeHigh)
     {
-        Log::Info("WriteFile", "Invoked");
-
-        return WriteFile(hFile->m_handle, lpBuffer, nNumberOfBytesToWrite, reinterpret_cast<LPDWORD>(lpNumberOfBytesWritten), lpOverlapped);
-    }
-
-    BOOL Hooks_ReadFile(FileHandle *hFile,
-                        void *lpBuffer,
-                        unsigned int nNumberOfBytesToRead,
-                        unsigned int *lpNumberOfBytesRead,
-                        _OVERLAPPED *lpOverlapped)
-    {
-        std::vector<uint8_t> buffer(nNumberOfBytesToRead);
-
-        // Log::Info("ReadFile", "Reading file with handle -> ", reinterpret_cast<HANDLE>(hFile), ", Num Bytes -> ", nNumberOfBytesToRead);
-
-        DWORD bytesRead = 0;
-        if (ReadFile(hFile->m_handle, buffer.data(), nNumberOfBytesToRead, &bytesRead, NULL))
+        std::error_code ec;
+        auto fileSize = std::filesystem::file_size(hFile->path, ec);
+        if (!ec)
         {
-            // change this to use std::move
-            memcpy(lpBuffer, buffer.data(), bytesRead);
-            return true;
+            if (lpFileSizeHigh != nullptr)
+            {
+                *lpFileSizeHigh = uint32_t(fileSize >> 32U);
+            }
+
+            return (uint32_t)(fileSize);
         }
 
-        Log::Error("ReadFile", "Failed to read file. Error: ", GetLastError());
-        return false;
+        return INVALID_FILE_SIZE;
     }
 
-    // This func calls NtCreateFile directly, so we need to hook it so we dont crash
+    uint32_t Hooks_GetFileSizeEx(FileHandle *hFile, LARGE_INTEGER *lpFileSize)
+    {
+        std::error_code ec;
+        auto fileSize = std::filesystem::file_size(hFile->path, ec);
+        if (!ec)
+        {
+            if (lpFileSize != nullptr)
+            {
+                lpFileSize->QuadPart = ByteSwap(fileSize);
+            }
+
+            return TRUE;
+        }
+
+        return FALSE;
+    }
+
+    uint32_t Hooks_ReadFile(
+        FileHandle *hFile,
+        void *lpBuffer,
+        uint32_t nNumberOfBytesToRead,
+        be<uint32_t> *lpNumberOfBytesRead,
+        XOVERLAPPED *lpOverlapped)
+    {
+        uint32_t result = FALSE;
+        if (lpOverlapped != nullptr)
+        {
+            std::streamoff streamOffset = lpOverlapped->Offset + (std::streamoff(lpOverlapped->OffsetHigh.get()) << 32U);
+            hFile->stream.clear();
+            hFile->stream.seekg(streamOffset, std::ios::beg);
+
+            if (hFile->stream.bad())
+            {
+                return FALSE;
+            }
+        }
+
+        uint32_t numberOfBytesRead;
+        hFile->stream.read((char *)(lpBuffer), nNumberOfBytesToRead);
+        if (!hFile->stream.bad())
+        {
+            numberOfBytesRead = uint32_t(hFile->stream.gcount());
+            result = TRUE;
+        }
+
+        if (result)
+        {
+            if (lpOverlapped != nullptr)
+            {
+                lpOverlapped->Internal = 0;
+                lpOverlapped->InternalHigh = numberOfBytesRead;
+            }
+            else if (lpNumberOfBytesRead != nullptr)
+            {
+                *lpNumberOfBytesRead = numberOfBytesRead;
+            }
+        }
+
+        Log::Info("ReadFile", "Read ", numberOfBytesRead, " bytes from file -> ", hFile->path, ".");
+
+        return result;
+    }
+
+    uint32_t Hooks_SetFilePointer(FileHandle *hFile, int32_t lDistanceToMove, be<int32_t> *lpDistanceToMoveHigh, uint32_t dwMoveMethod)
+    {
+        int32_t distanceToMoveHigh = lpDistanceToMoveHigh ? lpDistanceToMoveHigh->get() : 0;
+        std::streamoff streamOffset = lDistanceToMove + (std::streamoff(distanceToMoveHigh) << 32U);
+        std::fstream::seekdir streamSeekDir = {};
+        switch (dwMoveMethod)
+        {
+        case FILE_BEGIN:
+            streamSeekDir = std::ios::beg;
+            break;
+        case FILE_CURRENT:
+            streamSeekDir = std::ios::cur;
+            break;
+        case FILE_END:
+            streamSeekDir = std::ios::end;
+            break;
+        default:
+            assert(false && "Unknown move method.");
+            break;
+        }
+
+        hFile->stream.clear();
+        hFile->stream.seekg(streamOffset, streamSeekDir);
+        if (hFile->stream.bad())
+        {
+            return INVALID_SET_FILE_POINTER;
+        }
+
+        std::streampos streamPos = hFile->stream.tellg();
+        if (lpDistanceToMoveHigh != nullptr)
+            *lpDistanceToMoveHigh = int32_t(streamPos >> 32U);
+
+        return uint32_t(streamPos);
+    }
+
+    uint32_t Hooks_SetFilePointerEx(FileHandle *hFile, int32_t lDistanceToMove, LARGE_INTEGER *lpNewFilePointer, uint32_t dwMoveMethod)
+    {
+        std::fstream::seekdir streamSeekDir = {};
+        switch (dwMoveMethod)
+        {
+        case FILE_BEGIN:
+            streamSeekDir = std::ios::beg;
+            break;
+        case FILE_CURRENT:
+            streamSeekDir = std::ios::cur;
+            break;
+        case FILE_END:
+            streamSeekDir = std::ios::end;
+            break;
+        default:
+            assert(false && "Unknown move method.");
+            break;
+        }
+
+        hFile->stream.clear();
+        hFile->stream.seekg(lDistanceToMove, streamSeekDir);
+        if (hFile->stream.bad())
+        {
+            return FALSE;
+        }
+
+        if (lpNewFilePointer != nullptr)
+        {
+            lpNewFilePointer->QuadPart = ByteSwap(int64_t(hFile->stream.tellg()));
+        }
+
+        return TRUE;
+    }
+
+    uint32_t Hooks_WriteFile(FileHandle *hFile, const void *lpBuffer, uint32_t nNumberOfBytesToWrite, be<uint32_t> *lpNumberOfBytesWritten, void *lpOverlapped)
+    {
+        assert(lpOverlapped == nullptr && "Overlapped not implemented.");
+
+        hFile->stream.write((const char *)(lpBuffer), nNumberOfBytesToWrite);
+        if (hFile->stream.bad())
+            return FALSE;
+
+        if (lpNumberOfBytesWritten != nullptr)
+            *lpNumberOfBytesWritten = uint32_t(hFile->stream.gcount());
+
+        return TRUE;
+    }
+
     BOOL Hooks_CreateDirectoryA(const char *lpPathName, void *lpSecurityAttributes)
     {
         Log::Info("CreateDirectoryA", "Creating directory -> ", lpPathName);
@@ -218,8 +326,13 @@ namespace Hooks
 GUEST_FUNCTION_HOOK(sub_82C74A90, Hooks::Hooks_WriteFile)
 GUEST_FUNCTION_HOOK(sub_82C74908, Hooks::Hooks_ReadFile)
 GUEST_FUNCTION_HOOK(sub_82C74F90, Hooks::Hooks_CreateFileA)
+
+GUEST_FUNCTION_HOOK(sub_82C75230, Hooks::Hooks_GetFileSize)
 GUEST_FUNCTION_HOOK(sub_82C78A98, Hooks::Hooks_GetFileSizeEx)
+
 GUEST_FUNCTION_HOOK(sub_82C74C48, Hooks::Hooks_SetFilePointer)
+GUEST_FUNCTION_HOOK(sub_82C78B60, Hooks::Hooks_SetFilePointerEx)
+
 GUEST_FUNCTION_HOOK(sub_82C74BB8, Hooks::Hooks_CreateDirectoryA)
 
 GUEST_FUNCTION_HOOK(__imp__ObCreateSymbolicLink, Hooks::Import_ObCreateSymbolicLink)

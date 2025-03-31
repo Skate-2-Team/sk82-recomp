@@ -12,6 +12,91 @@ labels = [
     0x823105B0,
 ]
 
+# lua_gc
+[[switch]] 
+base = 0x827BF548
+r = 7
+default = 0x827BF6F8
+labels = [
+    0x827BF580,
+    0x827BF594,
+    0x827BF5A8,
+    0x827BF648,
+    0x827BF65C,
+    0x827BF670,
+    0x827BF6CC,
+    0x827BF6E0,
+]
+
+# AptCIH::SetProceduralProperty
+[[switch]] 
+base = 0x82807CEC
+r = 6
+default = 0x828083AC
+labels = [
+    0x828081FC,
+    0x828081FC,
+    0x8280822C,
+    0x82808098,
+    0x82808148,
+    0x82807D34,
+    0x82807E60,
+    0x82807F8C,
+    0x8280825C,
+    0x828082D8,
+    0x82808314,
+    0x82808350,
+    0x8280838C,
+]
+
+# Sk8::Render::RenderMan::UpdateFresnelLookupTexture
+[[switch]] 
+base = 0x8269BE40
+r = 31
+default = 0x8269BE6C
+labels = [
+    0x8269BE6C,
+]
+
+# Sk8::Render::PostFX::Init
+[[switch]] 
+base = 0x82697A10
+r = 11
+default = 0x82697A3C
+labels = [
+    0x82697A3C,
+]
+
+# Sk8::Render::PostFX::CreateBlacktexture_ARGB32
+[[switch]] 
+base = 0x826982D8
+r = 11
+default = 0x82698304
+labels = [
+    0x82698304,
+]
+
+# Sk8::Render::PostFX::CreateNoiseTexture_ARGB32
+[[switch]] 
+base = 0x8269802C
+r = 11
+default = 0x82698058 
+labels = [
+    0x82698058,
+]
+
+# Sk8::ShaderSystem::ColorWrite
+[[switch]] 
+base = 0x82BCD084
+r = 4
+default = 0x82BCD1EC 
+labels = [
+    0x82BCD0AC, # Case 0 - Check for 'R'/'r'
+    0x82BCD0FC, # Case 1 - Check for 'G'/'g'
+    0x82BCD14C, # Case 2 - Check for 'B'/'b'
+    0x82BCD19C, # Case 3 - Check for 'A'/'a'
+]
+
 # EA::Allocator::NonLocalAllocator::SetOption
 [[switch]]
 base = 0x82A098C4

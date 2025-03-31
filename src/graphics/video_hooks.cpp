@@ -76,32 +76,27 @@ namespace VideoHooks
         return texture;
     }
 
-    void D3DDevice_Swap(void *pDevice, void *pFrontBuffer, const void *pParameters)
+    void ShowPixelBuffer(void *pPixelBuffer)
     {
-        SDL_Event e;
-
-        while (SDL_PollEvent(&e))
-        {
-            if (e.type == SDL_EVENT_QUIT)
-            {
-                g_video->m_quit = true;
-            }
-        }
-
         g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
+        g_video->WindowLoop();
 
+        /*
         auto frameEnd = std::chrono::steady_clock::now();
         auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - m_frameStart);
 
         if (frameDuration < m_targetFrameTime)
         {
             Log::Info("VideoHooks", "Sleeping for -> ", (m_targetFrameTime - frameDuration).count(), "ms");
-            std::this_thread::sleep_for(m_targetFrameTime - frameDuration);
-        }
-    }
 
+        }*/
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // Sleep to prevent busy waiting
+
+        Log::Info("ShowPixelBuffer", "Presented.");
+    }
 }
 
 GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
-GUEST_FUNCTION_HOOK(sub_823A7C98, VideoHooks::D3DDevice_Swap)
+GUEST_FUNCTION_HOOK(sub_8232CFD0, VideoHooks::ShowPixelBuffer)
 // GUEST_FUNCTION_HOOK(sub_8210E428, VideoHooks::D3DDevice_CreateSurface)

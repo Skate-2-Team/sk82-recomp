@@ -4,6 +4,9 @@
 #include <iostream>
 #include <profileapi.h>
 #include <algorithm>
+#include <fstream>
+#include <filesystem>
+#include <vector>
 
 #include "ppc/ppc_recomp_shared.h"
 #include "kernel/memory.h"
@@ -14,6 +17,7 @@
 
 #include "kernel/xbox.h"
 #include "xex.h"
+#include <unordered_set>
 
 namespace Hooks
 {
@@ -353,20 +357,23 @@ namespace Hooks
         }
     };
 
-    struct FileHandle : public KernelObject
+    struct FileHandle : KernelObject
     {
-        FileHandle(HANDLE handle) : m_handle(handle) {};
+        std::fstream stream;
+        std::filesystem::path path;
+    };
 
-        ~FileHandle() override
-        {
-            if (m_handle != INVALID_HANDLE_VALUE)
-            {
-                Log::Info("FileHandle", "Closing handle -> ", m_handle);
-                CloseHandle(m_handle);
-            }
-        }
+    struct XamListener : KernelObject
+    {
+        uint32_t id{};
+        uint64_t areas{};
+        std::vector<std::tuple<uint32_t, uint32_t>> notifications;
 
-        HANDLE m_handle;
+        XamListener(const XamListener &) = delete;
+        XamListener &operator=(const XamListener &) = delete;
+
+        XamListener();
+        ~XamListener();
     };
 
     // global vars

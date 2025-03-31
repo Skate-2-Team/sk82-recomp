@@ -32,6 +32,10 @@ invalid_instructions = [
 ]
 
 functions = [
+    { address = 0x827CFF70, size = 0x974 },
+    { address = 0x827BF530, size = 0x1D4 },
+    { address = 0x82807CC8, size = 0x704 },
+    { address = 0x82BCD070, size = 0x194 },
     { address = 0x82542418, size = 0x110 },
     { address = 0x823D4008, size = 0x160 },
     { address = 0x82451828, size = 0x58 },

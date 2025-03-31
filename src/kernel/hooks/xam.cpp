@@ -2,19 +2,16 @@
 
 namespace Hooks
 {
-    void Import_XamInputGetCapabilities()
+    static std::unordered_set<XamListener *> gListeners{};
+
+    XamListener::XamListener()
     {
-        Log::Stub("XamInputGetCapabilities", "Called.");
+        gListeners.insert(this);
     }
 
-    void Import_XamInputGetState()
+    XamListener::~XamListener()
     {
-        Log::Stub("XamInputGetState", "Called.");
-    }
-
-    void Import_XamInputSetState()
-    {
-        Log::Stub("XamInputSetState", "Called.");
+        gListeners.erase(this);
     }
 
     void Import_XamContentCreateEx()
@@ -49,7 +46,7 @@ namespace Hooks
 
     void Import_XamShowSigninUI()
     {
-        Log::Stub("XamShowSigninUI", "Called.");
+        Log::Info("XamShowSigninUI", "Called.");
     }
 
     void Import_XamShowGamerCardUIForXUID()
@@ -82,9 +79,9 @@ namespace Hooks
         Log::Stub("XamUserGetName", "Called.");
     }
 
-    void Import_XamUserGetSigninState()
+    uint32_t Import_XamUserGetSigninState(uint32_t userIndex)
     {
-        Log::Stub("XamUserGetSigninState", "Called.");
+        return true;
     }
 
     void Import_XamUserCheckPrivilege()
@@ -92,9 +89,9 @@ namespace Hooks
         Log::Stub("XamUserCheckPrivilege", "Called.");
     }
 
-    void Import_XamGetSystemVersion()
+    uint32_t Import_XamGetSystemVersion()
     {
-        Log::Stub("XamGetSystemVersion", "Called.");
+        return 0;
     }
 
     void Import_XamUserCreateStatsEnumerator()
@@ -122,11 +119,6 @@ namespace Hooks
         Log::Stub("XamLoaderLaunchTitle", "Called.");
     }
 
-    void Import_XamNotifyCreateListener()
-    {
-        Log::Stub("XamNotifyCreateListener", "Called.");
-    }
-
     void Import_XamShowMessageBoxUIEx()
     {
         Log::Stub("XamShowMessageBoxUIEx", "Called.");
@@ -142,9 +134,25 @@ namespace Hooks
         Log::Stub("XamGetExecutionId", "Called.");
     }
 
-    void Import_XamUserReadProfileSettings()
+    void Import_XamUserReadProfileSettings(
+        uint32_t titleId,
+        uint32_t userIndex,
+        uint32_t xuidCount,
+        uint64_t *xuids,
+        uint32_t settingCount,
+        uint32_t *settingIds,
+        be<uint32_t> *bufferSize,
+        void *buffer,
+        void *overlapped)
     {
-        Log::Stub("XamUserReadProfileSettings", "Called.");
+        if (buffer != nullptr)
+        {
+            memset(buffer, 0, *bufferSize);
+        }
+        else
+        {
+            *bufferSize = 4;
+        }
     }
 
     void Import_XamUserWriteProfileSettings()
@@ -177,9 +185,65 @@ namespace Hooks
         Log::Stub("XNotifyPositionUI", "Called.");
     }
 
-    void Import_XNotifyGetNext()
+    uint32_t Import_XamNotifyCreateListener(uint64_t qwAreas)
     {
-        Log::Stub("XNotifyGetNext", "Called.");
+        auto *listener = CreateKernelObject<XamListener>();
+
+        listener->areas = qwAreas;
+
+        return GetKernelHandle(listener);
+    }
+
+    void XamNotifyEnqueueEvent(uint32_t dwId, uint32_t dwParam)
+    {
+        for (const auto &listener : gListeners)
+        {
+            if (((1 << MSG_AREA(dwId)) & listener->areas) == 0)
+                continue;
+
+            listener->notifications.emplace_back(dwId, dwParam);
+        }
+    }
+
+    bool Import_XNotifyGetNext(uint32_t hNotification, uint32_t dwMsgFilter, be<uint32_t> *pdwId, be<uint32_t> *pParam)
+    {
+        auto &listener = *GetKernelObject<XamListener>(hNotification);
+
+        if (dwMsgFilter)
+        {
+            for (size_t i = 0; i < listener.notifications.size(); i++)
+            {
+                if (std::get<0>(listener.notifications[i]) == dwMsgFilter)
+                {
+                    if (pdwId)
+                        *pdwId = std::get<0>(listener.notifications[i]);
+
+                    if (pParam)
+                        *pParam = std::get<1>(listener.notifications[i]);
+
+                    listener.notifications.erase(listener.notifications.begin() + i);
+
+                    return true;
+                }
+            }
+        }
+        else
+        {
+            if (listener.notifications.empty())
+                return false;
+
+            if (pdwId)
+                *pdwId = std::get<0>(listener.notifications[0]);
+
+            if (pParam)
+                *pParam = std::get<1>(listener.notifications[0]);
+
+            listener.notifications.erase(listener.notifications.begin());
+
+            return true;
+        }
+
+        return false;
     }
 
     void Import_XMsgStartIORequest()
@@ -237,11 +301,6 @@ namespace Hooks
         Log::Stub("XamTaskShouldExit", "Called.");
     }
 
-    void Import_XamUserGetSigninInfo()
-    {
-        Log::Stub("XamUserGetSigninInfo", "Called.");
-    }
-
     void Import_XamTaskCloseHandle()
     {
         Log::Stub("XamTaskCloseHandle", "Called.");
@@ -252,14 +311,34 @@ namespace Hooks
         Log::Stub("XamContentFlush", "Called.");
     }
 
-    void Import_XamContentGetCreator()
+    uint32_t Import_XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA *contentData, be<uint32_t> *isCreator, be<uint64_t> *xuid, XXOVERLAPPED *overlapped)
     {
-        Log::Stub("XamContentGetCreator", "Called.");
+        if (isCreator)
+            *isCreator = true;
+
+        if (xuid)
+            *xuid = 0xB13EBABEBABEBABE;
+
+        return 0;
     }
 
-    void Import_XamContentGetDeviceState()
+    uint32_t Import_XamContentGetDeviceState()
     {
-        Log::Stub("XamContentGetDeviceState", "Called.");
+        return 0;
+    }
+
+    uint32_t Import_XamUserGetSigninInfo(uint32_t userIndex, uint32_t flags, XUSER_SIGNIN_INFO *info)
+    {
+        if (userIndex == 0)
+        {
+            memset(info, 0, sizeof(*info));
+            info->xuid = 0xB13EBABEBABEBABE;
+            info->SigninState = 1;
+            strcpy(info->Name, "SK8");
+            return 0;
+        }
+
+        return 0x00000525; // ERROR_NO_SUCH_USER
     }
 
     void Import_XamContentSetThumbnail()
@@ -379,9 +458,6 @@ GUEST_FUNCTION_HOOK(__imp__XamShowGameInviteUI, Hooks::Import_XamShowGameInviteU
 GUEST_FUNCTION_HOOK(__imp__XamShowMessageComposeUI, Hooks::Import_XamShowMessageComposeUI)
 GUEST_FUNCTION_HOOK(__imp__XamShowPlayerReviewUI, Hooks::Import_XamShowPlayerReviewUI)
 GUEST_FUNCTION_HOOK(__imp__XamShowKeyboardUI, Hooks::Import_XamShowKeyboardUI)
-GUEST_FUNCTION_HOOK(__imp__XamInputGetCapabilities, Hooks::Import_XamInputGetCapabilities)
-GUEST_FUNCTION_HOOK(__imp__XamInputGetState, Hooks::Import_XamInputGetState)
-GUEST_FUNCTION_HOOK(__imp__XamInputSetState, Hooks::Import_XamInputSetState)
 GUEST_FUNCTION_HOOK(__imp__XamContentCreateEx, Hooks::Import_XamContentCreateEx)
 GUEST_FUNCTION_HOOK(__imp__XamContentClose, Hooks::Import_XamContentClose)
 GUEST_FUNCTION_HOOK(__imp__XamContentGetLicenseMask, Hooks::Import_XamContentGetLicenseMask)

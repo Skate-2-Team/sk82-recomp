@@ -49,16 +49,6 @@ namespace Hooks
     int Import_ExCreateThread(be<uint32_t> *handle, uint32_t stackSize, be<uint32_t> *threadId, uint32_t xApiThreadStartup,
                               uint32_t startAddress, uint32_t startContext, uint32_t creationFlags)
     {
-        // list all the parameters in log
-        Log::Info("ExCreateThread",
-                  "handle: ", handle,
-                  " stackSize: ", stackSize,
-                  " threadId: ", threadId,
-                  " xApiThreadStartup: ", xApiThreadStartup,
-                  " startAddress: ", startAddress,
-                  " startContext: ", startContext,
-                  " creationFlags: ", creationFlags);
-
         uint32_t hostThreadId;
 
         *handle = GetKernelHandle(GuestThread::Start({startAddress, startContext, creationFlags}, &hostThreadId));

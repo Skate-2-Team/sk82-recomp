@@ -15,7 +15,7 @@ bool Video::MakeWindow()
         return false;
     }
 
-    m_window = SDL_CreateWindow(m_windowTitle, m_screenWidth, m_screenHeight, SDL_WINDOW_HIDDEN);
+    m_window = SDL_CreateWindow(m_windowTitle, m_screenWidth, m_screenHeight, SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE);
 
     if (!m_window)
     {
@@ -56,31 +56,24 @@ bool Video::InitD3D()
     return true;
 }
 
-// This will eventually be hooked into the games rendering loop - danny
 void Video::WindowLoop()
 {
     SDL_Event e;
 
-    while (!m_quit)
+    while (SDL_PollEvent(&e))
     {
-        while (SDL_PollEvent(&e))
+        if (e.type == SDL_EVENT_QUIT)
         {
-            if (e.type == SDL_EVENT_QUIT)
-            {
-                m_quit = true;
-            }
+            m_quit = true;
         }
-
-        SampleRenderFrame();
     }
+
+    SampleRenderFrame();
 }
 
 // Just for debugs
 void Video::SampleRenderFrame()
 {
-    if (!m_d3dDevice)
-        return;
-
     m_d3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_XRGB(30, 30, 30), 1.0f, 0);
 
     if (SUCCEEDED(m_d3dDevice->BeginScene()))
@@ -105,6 +98,4 @@ void Video::SampleRenderFrame()
 
         m_d3dDevice->EndScene();
     }
-
-    m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
 }
