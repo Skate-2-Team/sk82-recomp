@@ -105,6 +105,8 @@ namespace InputHooks
         ByteSwapInplace(state->Gamepad.sThumbLY);
         ByteSwapInplace(state->Gamepad.sThumbRX);
         ByteSwapInplace(state->Gamepad.sThumbRY);
+
+        return ERROR_SUCCESS;
     }
 
     void Import_XamInputSetState()

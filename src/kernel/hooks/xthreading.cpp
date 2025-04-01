@@ -387,11 +387,29 @@ namespace Hooks
         uint32_t dueTimeMs = 0;
 
         if (dueTime100ns < 0)
+        {
             dueTimeMs = static_cast<uint32_t>((-dueTime100ns) / 10000);
-        else
-            dueTimeMs = 0;
+        }
+        else if (dueTime100ns > 0)
+        {
+            int64_t currentTime100ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                           std::chrono::system_clock::now().time_since_epoch())
+                                           .count() /
+                                       100;
 
-        Log::Info("NtSetTimerEx", "Quad Part -> ", lpDueTime->QuadPart, " Swapped Part -> ", ByteSwap(lpDueTime->QuadPart), " Due Time -> ", dueTimeMs, " Period -> ", lPeriod);
+            if (dueTime100ns <= currentTime100ns)
+            {
+                dueTimeMs = 0;
+            }
+            else
+            {
+                dueTimeMs = static_cast<uint32_t>((dueTime100ns - currentTime100ns) / 10000);
+            }
+        }
+        else
+        {
+            dueTimeMs = 0;
+        }
 
         timer->SetTimer(dueTimeMs, static_cast<uint32_t>(lPeriod));
 

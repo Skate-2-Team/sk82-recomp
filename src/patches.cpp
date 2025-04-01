@@ -25,6 +25,6 @@ GUEST_FUNCTION_STUB(sub_823D7C90) // NFSMixMap::MixMasterChannels
 GUEST_FUNCTION_STUB(sub_828F0A10) // Fesl::AchievementManagerImpl::SyncTo360Achievements
 
 // This func waits forever, not sure what causes it
-GUEST_FUNCTION_HOOK(sub_8231E2F0, Patch_LastInput) // Sk8::Input::InputManager::LastInput
+// GUEST_FUNCTION_HOOK(sub_8231E2F0, Patch_LastInput) // Sk8::Input::InputManager::LastInput
 
 GUEST_FUNCTION_HOOK(sub_82C74580, Patch_GetTickCount) // GetTickCount
