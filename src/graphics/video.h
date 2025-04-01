@@ -18,6 +18,7 @@ public:
     HWND m_hwnd = nullptr;
     LPDIRECT3D9 m_d3d = nullptr;
     LPDIRECT3DDEVICE9 m_d3dDevice = nullptr;
+
     bool m_quit = false;
 
     Video();

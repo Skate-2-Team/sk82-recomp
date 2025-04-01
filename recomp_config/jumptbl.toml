@@ -12,6 +12,44 @@ labels = [
     0x823105B0,
 ]
 
+# NFSMixShape::GetCurveOutput
+[[switch]] 
+base = 0x823D439C
+r = 4
+default = 0x823D4568
+labels = [
+    0x823D43F0,
+    0x823D44F8,
+    0x823D444C,
+    0x823D4530,
+    0x823D446C,
+    0x823D4514,
+    0x823D44BC,
+    0x823D44DC,
+    0x823D43DC,
+    0x823D454C,
+]
+
+
+# Contexts::ContextSystemImpl::HandleMessage
+[[switch]] 
+base = 0x8289EB6C
+r = 5
+default = 0x82C8C498
+labels = [
+    0x8289EBEC,
+    0x8289EC00,
+    0x8289EBB0,
+    0x8289EC14,
+    0x8289EC28,
+    0x8289EC3C,
+    0x8289EC50,
+    0x8289EC64,
+    0x8289EBC4,
+    0x8289EBD8,
+    0x8289EC78,
+]
+
 # lua_gc
 [[switch]] 
 base = 0x827BF548

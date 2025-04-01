@@ -7,14 +7,6 @@ https://github.com/hedge-dev/UnleashedRecomp/blob/main/UnleashedRecomp/kernel/io
 
 namespace Hooks
 {
-    static std::string ResolvePath(std::string fileName)
-    {
-        fileName.erase(fileName.begin(), fileName.begin() + 3);
-
-        std::string fullPath = "game\\" + fileName;
-
-        return fullPath;
-    }
 
     FileHandle *Hooks_CreateFileA(
         const char *lpFileName,
@@ -252,6 +244,50 @@ namespace Hooks
         return CreateDirectoryA(actualPath.c_str(), 0);
     }
 
+    FindHandle *Import_FindFirstFileA(const char *lpFileName, WIN32_FIND_DATAA *lpFindFileData)
+    {
+        std::string_view path = lpFileName;
+
+        if (path.find("\\*") == (path.size() - 2) || path.find("/*") == (path.size() - 2))
+        {
+            path.remove_suffix(1);
+        }
+        else if (path.find("\\*.*") == (path.size() - 4) || path.find("/*.*") == (path.size() - 4))
+        {
+            path.remove_suffix(3);
+        }
+        else
+        {
+            Log::Info("FindFirstFileA", "Searching for -> ", path);
+
+            assert(!std::filesystem::path(path).has_extension() && "Unknown search pattern.");
+        }
+
+        FindHandle findHandle(path);
+
+        if (findHandle.searchResult.empty())
+            return GetInvalidKernelObject<FindHandle>();
+
+        findHandle.fillFindData(lpFindFileData);
+
+        return CreateKernelObject<FindHandle>(std::move(findHandle));
+    }
+
+    uint32_t Import_FindNextFileA(FindHandle *Handle, WIN32_FIND_DATAA *lpFindFileData)
+    {
+        Handle->iterator++;
+
+        if (Handle->iterator == Handle->searchResult.end())
+        {
+            return FALSE;
+        }
+        else
+        {
+            Handle->fillFindData(lpFindFileData);
+            return TRUE;
+        }
+    }
+
     void Import_NtOpenFile()
     {
         Log::Stub("NtOpenFile", "Called.");
@@ -327,6 +363,9 @@ namespace Hooks
         Log::Stub("IoDismountVolumeByFileHandle", "Called.");
     }
 }
+
+GUEST_FUNCTION_HOOK(sub_82C74DB8, Hooks::Import_FindFirstFileA)
+GUEST_FUNCTION_HOOK(sub_82C746A8, Hooks::Import_FindNextFileA)
 
 GUEST_FUNCTION_HOOK(sub_82C74A90, Hooks::Hooks_WriteFile)
 GUEST_FUNCTION_HOOK(sub_82C74908, Hooks::Hooks_ReadFile)

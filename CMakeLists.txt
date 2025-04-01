@@ -69,6 +69,7 @@ add_executable(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME} 
     SDL3::SDL3
+    unordered_dense::unordered_dense
     d3d9 
     o1heap
 )

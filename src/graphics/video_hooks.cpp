@@ -2,6 +2,35 @@
 
 namespace VideoHooks
 {
+    static std::queue<VertexBatchInfo> batchQueue;
+    std::mutex queueMutex;
+
+    static bool g_sceneActive = false;
+
+    void EnsureSceneActive()
+    {
+        if (!g_sceneActive && g_video->m_d3dDevice)
+        {
+            HRESULT hr = g_video->m_d3dDevice->BeginScene();
+            if (SUCCEEDED(hr))
+            {
+                g_sceneActive = true;
+            }
+        }
+    }
+
+    void EndSceneIfActive()
+    {
+        if (g_sceneActive && g_video->m_d3dDevice)
+        {
+            HRESULT hr = g_video->m_d3dDevice->EndScene();
+            if (SUCCEEDED(hr))
+            {
+                g_sceneActive = false;
+            }
+        }
+    }
+
     HRESULT Direct3D_CreateDevice(
         unsigned int Adapter,
         int DeviceType,
@@ -27,74 +56,52 @@ namespace VideoHooks
         return 1;
     }
 
-    void *D3DDevice_CreateSurface(unsigned int Width, unsigned int Height, _D3DFORMAT D3DFormat, _D3DMULTISAMPLE_TYPE MultiSample, const _D3DSURFACE_PARAMETERS *pParameters)
-    {
-        Log::Info("VideoHooks", "D3DDevice_CreateSurface has been called -> ", Width, "x", Height, ", Format: 0x", D3DFormat);
-
-        IDirect3DSurface9 *surface = nullptr;
-
-        HRESULT hr = g_video->m_d3dDevice->CreateRenderTarget(
-            Width,
-            Height,
-            D3DFMT_A8R8G8B8,
-            MultiSample,
-            0,
-            FALSE, // Lockable
-            &surface,
-            nullptr);
-
-        if (FAILED(hr))
-        {
-            std::cout << "[Error][VideoHooks]: CreateRenderTarget failed: 0x" << std::hex << hr << std::endl;
-            return nullptr;
-        }
-
-        return surface;
-    }
-
-    void *D3DDevice_CreateTexture(unsigned int Width, unsigned int Height, unsigned int Depth, unsigned int Levels, unsigned int Usage, signed int D3DFormat, unsigned int Pool, _D3DRESOURCETYPE D3DType)
-    {
-        Log::Info("VideoHooks", "D3DDevice_CreateTexture called: ", Width, "x", Height, ", Format: 0x", D3DFormat);
-
-        IDirect3DTexture9 *texture = nullptr;
-        HRESULT hr = g_video->m_d3dDevice->CreateTexture(
-            Width,
-            Height,
-            Levels,
-            Usage,
-            (D3DFORMAT)D3DFMT_A8R8G8B8,
-            (D3DPOOL)Pool,
-            &texture,
-            nullptr);
-
-        if (FAILED(hr))
-        {
-            std::cout << "[Error][VideoHooks]: CreateTexture failed: 0x" << std::hex << hr << std::endl;
-            return nullptr;
-        }
-
-        return texture;
-    }
-
     void ShowPixelBuffer(void *pPixelBuffer)
     {
-        g_video->WindowLoop();
+        // Log::Info("ShowPixelBuffer", "Stride is -> ", g_currentBatch.stride, " Vertex Count -> ", g_currentBatch.vertexCount, " Prim Type -> ", g_currentBatch.primType);
+
+        std::lock_guard<std::mutex> lock(queueMutex);
+        {
+            while (!batchQueue.empty())
+            {
+                VertexBatchInfo currentBatch = batchQueue.front();
+                batchQueue.pop();
+
+                // process the batch
+
+                g_heap->Free(currentBatch.memory);
+            }
+        }
+
+        EndSceneIfActive();
 
         g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
 
-        /*
-        auto frameEnd = std::chrono::steady_clock::now();
-        auto frameDuration = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - m_frameStart);
+        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // roughly 60 FPS until I figure out how to measure frame time
 
-        if (frameDuration < m_targetFrameTime)
+        EnsureSceneActive();
+    }
+
+    uint32_t D3DDevice_BeginVertices(
+        void *pDevice,
+        uint32_t PrimitiveType,
+        unsigned __int64 vertexCount,
+        uint32_t stride)
+    {
+        Log::Info("VideoHooks", "BeginVertices: PrimType -> ", PrimitiveType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
+
+        size_t totalSize = stride * vertexCount;
+
+        EnsureSceneActive();
+
+        void *memory = g_heap->AllocPhysical(totalSize, 128);
+
         {
-            Log::Info("VideoHooks", "Sleeping for -> ", (m_targetFrameTime - frameDuration).count(), "ms");
+            std::lock_guard<std::mutex> lock(queueMutex);
+            batchQueue.push({memory, totalSize, PrimitiveType, (uint32_t)vertexCount, stride});
+        }
 
-        }*/
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // Sleep to prevent busy waiting
-
-        Log::Info("ShowPixelBuffer", "Presented.");
+        return Memory::MapVirtual(memory);
     }
 
     void D3DDevice_Clear(
@@ -120,18 +127,60 @@ namespace VideoHooks
         g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
     }
 
-    void *D3DDevice_BeginVertices(
-        void *pDevice,
-        void *PrimitiveType,
-        unsigned __int64 VertexStreamZeroStride)
+    PPC_FUNC_IMPL(__imp__sub_8236C5F8);
+    void RwMemCopy(uint32_t destPtr, uint32_t sourcePtr)
     {
-        Log::Info("VideoHooks", "D3DDevice_BeginVertices called: ", PrimitiveType, ", Stride: ", VertexStreamZeroStride);
+        // Log::Info("RwMemCopy", "Called: ", destPtr, ", ", sourcePtr);
 
-        // return a bit of memory for the vertices
+        if (destPtr == 0 || sourcePtr == 0)
+        {
+            Log::Error("RwMemCopy", "INVALID MEM COPY: ", destPtr, ", ", sourcePtr);
+            return;
+        }
 
-        // void *pVertices = g_heap->AllocPhysical(0x10000, 128); // 64k of memory for the vertices
+        __imp__sub_8236C5F8(*PPCLocal::g_ppcContext, Memory::g_base);
+    }
 
-        return nullptr;
+    void D3DDevice_KickOff()
+    {
+    }
+
+    uint32_t D3D_LockResource(void *pResource,
+                              unsigned __int64 AsyncBlock,
+                              _D3DBLOCKTYPE BlockType,
+                              unsigned int Level,
+                              unsigned int pBase,
+                              unsigned int pMip,
+                              unsigned int pData,
+                              unsigned int Size,
+                              unsigned int Flags,
+                              unsigned int CoherStatus)
+    {
+        // Return some memory for the resource
+
+        return Memory::MapVirtual(g_heap->AllocPhysical(Size, 128));
+    }
+
+    void __fastcall D3D_SetViewport(
+        void *pDevice,
+        double X,
+        double Y,
+        double Width,
+        double Height,
+        double MinZ,
+        double MaxZ,
+        unsigned int Flags)
+    {
+        DWORD xDword = DWORD(X);
+        DWORD yDword = DWORD(Y);
+        DWORD widthDword = DWORD(Width);
+        DWORD heightDword = DWORD(Height);
+
+        const D3DVIEWPORT9 viewport = {xDword, yDword, widthDword, heightDword, float(MinZ), float(MaxZ)};
+
+        // Log::Info("D3D_SetViewport", "Viewport has been set -> ", xDword, ", ", yDword, ", ", widthDword, ", ", heightDword, ", ", float(MinZ), ", ", float(MaxZ));
+
+        g_video->m_d3dDevice->SetViewport(&viewport);
     }
 }
 
@@ -139,5 +188,23 @@ GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
 GUEST_FUNCTION_HOOK(sub_8232CFD0, VideoHooks::ShowPixelBuffer)
 GUEST_FUNCTION_HOOK(sub_82381BD0, VideoHooks::D3DDevice_Clear)
 GUEST_FUNCTION_HOOK(sub_82381AA8, VideoHooks::D3DDevice_ClearF)
-GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::D3DDevice_CreateTexture)
-// GUEST_FUNCTION_HOOK(sub_8210E428, VideoHooks::D3DDevice_CreateSurface)
+GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::D3DDevice_BeginVertices)
+GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::D3D_LockResource)
+GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)
+GUEST_FUNCTION_HOOK(sub_8235FCE0, VideoHooks::D3D_SetViewport)
+
+GUEST_FUNCTION_STUB(sub_8233F578) // D3DDevice_SetShaderGPRAllocation
+GUEST_FUNCTION_STUB(sub_8235FBE8) // D3DDevice_SetScissorRect
+GUEST_FUNCTION_STUB(sub_823661D0) // renderengine::PixelBuffer::Xbox2ResolveTo
+GUEST_FUNCTION_STUB(sub_823650A0) // renderengine::postfx::PfxHelper::RenderQuad
+GUEST_FUNCTION_STUB(sub_8235B0F8) // renderengine::postfx::PfxHelper::RenderQuad_Transform
+GUEST_FUNCTION_STUB(sub_8235F8F8) // D3D::SetSurfaceClip
+GUEST_FUNCTION_STUB(sub_82363EC0) // D3D::SetPending_RenderStates
+GUEST_FUNCTION_STUB(sub_82358B40) // renderengine::postfx::RenderTarget::Resolve
+GUEST_FUNCTION_STUB(sub_82360650) // D3DDevice_SetSurfaces
+GUEST_FUNCTION_STUB(sub_82364740) // D3D::SetPending_AluConstants
+GUEST_FUNCTION_STUB(sub_823630F0) // D3D::SetLiteralShaderConstants
+GUEST_FUNCTION_STUB(sub_82363AC8) // D3DDevice_DrawVertices
+GUEST_FUNCTION_STUB(sub_8239C960) // D3DDevice_BeginTiling
+GUEST_FUNCTION_STUB(sub_823A5398) // D3DDevice_EndTiling
+GUEST_FUNCTION_STUB(sub_82364240) // D3DDevice_DrawIndexedVertices

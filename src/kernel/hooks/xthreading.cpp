@@ -233,7 +233,7 @@ namespace Hooks
             return STATUS_TIMEOUT;
         }
 
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
     void Import_KeReleaseSpinLockFromRaisedIrql()
     {
@@ -282,11 +282,7 @@ namespace Hooks
     {
         uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
 
-        if (timeout != 0 && timeout != INFINITE)
-        {
-            return NTSTATUS_TIMEOUT;
-        }
-
+        // No need for timeout check because the Wait() assert will catch it
         if (IsKernelObject(Handle))
         {
             return GetKernelObject(Handle)->Wait(timeout);
@@ -297,7 +293,7 @@ namespace Hooks
             DebugBreak();
         }
 
-        return NTSTATUS_TIMEOUT;
+        return STATUS_TIMEOUT;
     }
 
     void Import_KeLeaveCriticalRegion()
@@ -326,13 +322,13 @@ namespace Hooks
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
 #endif
 
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     uint32_t Import_NtReleaseMutant(Mutant *handle)
     {
         handle->Release();
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     void Import_RtlInitializeCriticalSectionAndSpinCount(XRTL_CRITICAL_SECTION *cs, uint32_t spinCount)
@@ -346,13 +342,13 @@ namespace Hooks
     uint32_t Import_NtCreateMutant(be<uint32_t> *handle, void *objAttributes, uint32_t initialOwner)
     {
         *handle = GetKernelHandle(CreateKernelObject<Mutant>(!!initialOwner));
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     uint32_t Import_NtCreateSemaphore(be<uint32_t> *Handle, XOBJECT_ATTRIBUTES *ObjectAttributes, uint32_t InitialCount, uint32_t MaximumCount)
     {
         *Handle = GetKernelHandle(CreateKernelObject<Semaphore>(InitialCount, MaximumCount));
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     uint32_t Import_NtReleaseSemaphore(Semaphore *Handle, uint32_t ReleaseCount, int32_t *PreviousCount)
@@ -363,7 +359,7 @@ namespace Hooks
         if (PreviousCount != nullptr)
             *PreviousCount = ByteSwap(previousCount);
 
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     uint32_t Import_NtCreateTimer(be<uint32_t> *handle, void *objAttributes, uint32_t timerType)
@@ -372,7 +368,7 @@ namespace Hooks
 
         *handle = GetKernelHandle(CreateKernelObject<Timer>(autoReset));
 
-        return NTSTATUS_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     uint32_t Import_NtSetTimerEx(
@@ -387,13 +383,15 @@ namespace Hooks
         if (!timer)
             return 0;
 
-        int64_t dueTime100ns = lpDueTime ? lpDueTime->QuadPart : 0;
+        int64_t dueTime100ns = lpDueTime ? ByteSwap(lpDueTime->QuadPart) : 0;
         uint32_t dueTimeMs = 0;
 
         if (dueTime100ns < 0)
             dueTimeMs = static_cast<uint32_t>((-dueTime100ns) / 10000);
         else
             dueTimeMs = 0;
+
+        Log::Info("NtSetTimerEx", "Quad Part -> ", lpDueTime->QuadPart, " Swapped Part -> ", ByteSwap(lpDueTime->QuadPart), " Due Time -> ", dueTimeMs, " Period -> ", lPeriod);
 
         timer->SetTimer(dueTimeMs, static_cast<uint32_t>(lPeriod));
 
@@ -413,11 +411,57 @@ namespace Hooks
         Log::Stub("NtYieldExecution", "Called.");
     }
 
-    void Import_NtDuplicateObject()
+    uint32_t Import_NtDuplicateObject(uint32_t hSourceHandle, void **lpTargetHandle, uint32_t dwOptions)
     {
-        Log::Stub("NtDuplicateObject", "Called.");
+        if (hSourceHandle == CURRENT_THREAD_HANDLE)
+        {
+            GuestThreadHandle *currentThread = GetKernelObject<GuestThreadHandle>(CURRENT_THREAD_HANDLE);
+
+            *lpTargetHandle = (void *)GetKernelHandle(currentThread);
+
+            Log::Info("NtDuplicateObject", "Duplicated current thread handle: target=", (uint32_t)*lpTargetHandle);
+
+            return STATUS_SUCCESS;
+        }
+        else if (IsKernelObject(hSourceHandle))
+        {
+            GuestThreadHandle *sourceThread = GetKernelObject<GuestThreadHandle>(hSourceHandle);
+
+            if (sourceThread != nullptr && !IsInvalidKernelObject(sourceThread))
+            {
+                *lpTargetHandle = (void *)GetKernelHandle(sourceThread);
+
+                Log::Info("NtDuplicateObject", "Duplicated handle: source=", hSourceHandle, " target=", (uint32_t)*lpTargetHandle);
+
+                return STATUS_SUCCESS;
+            }
+        }
+
+        Log::Error("NtDuplicateObject", "Failed to duplicate handle: ", hSourceHandle);
+        DebugBreak();
+
+        return STATUS_INVALID_HANDLE;
+    }
+
+    void __fastcall Hooks_RaiseException(unsigned int dwExceptionCode, char dwExceptionFlags, unsigned int nNumberOfArguments, char *lpArguments)
+    {
+        if (dwExceptionCode == 0x406D1388) // Set Thread Name
+        {
+            THREADNAME_INFO *threadNameInfo = (THREADNAME_INFO *)lpArguments;
+
+            if (threadNameInfo->dwType == 0x1000)
+            {
+                char *threadName = Memory::Translate<char *>(threadNameInfo->szName.get());
+
+                // Set thread name in TEB
+                GuestThread::SetThreadName(threadNameInfo->dwThreadID, threadName);
+            }
+        }
     }
 }
+
+// RaiseException
+GUEST_FUNCTION_HOOK(sub_82C78920, Hooks::Hooks_RaiseException)
 
 GUEST_FUNCTION_HOOK(__imp__NtDuplicateObject, Hooks::Import_NtDuplicateObject)
 GUEST_FUNCTION_HOOK(__imp__NtCancelTimer, Hooks::Import_NtCancelTimer)

@@ -4,10 +4,18 @@
 
 #define CURRENT_THREAD_HANDLE uint32_t(-2)
 
+typedef struct ThreadNameException
+{
+    be<DWORD> dwType;
+    be<uint32_t> szName;
+    be<DWORD> dwThreadID;
+    be<DWORD> dwFlags;
+} THREADNAME_INFO;
+
 struct GuestThreadContext
 {
     PPCContext ppcContext{};
-    uint8_t* thread = nullptr;
+    uint8_t *thread = nullptr;
 
     GuestThreadContext(uint32_t cpuNumber);
     ~GuestThreadContext();
@@ -26,7 +34,7 @@ struct GuestThreadHandle : KernelObject
     std::atomic<bool> suspended;
     std::thread thread;
 
-    GuestThreadHandle(const GuestThreadParams& params);
+    GuestThreadHandle(const GuestThreadParams &params);
     ~GuestThreadHandle() override;
 
     uint32_t Wait(uint32_t timeout) override;
@@ -34,14 +42,13 @@ struct GuestThreadHandle : KernelObject
 
 struct GuestThread
 {
-    static uint32_t Start(const GuestThreadParams& params);
-    static GuestThreadHandle* Start(const GuestThreadParams& params, uint32_t* threadId);
+    static uint32_t Start(const GuestThreadParams &params);
+    static GuestThreadHandle *Start(const GuestThreadParams &params, uint32_t *threadId);
 
     static uint32_t GetCurrentThreadId();
     static void SetLastError(uint32_t error);
 
 #ifdef _WIN32
-    static void SetThreadName(uint32_t threadId, const char* name);
+    static void SetThreadName(uint32_t threadId, const char *name);
 #endif
 };
-

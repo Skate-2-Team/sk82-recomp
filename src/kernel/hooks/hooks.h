@@ -7,6 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include <vector>
+#include <ankerl/unordered_dense.h>
 
 #include "ppc/ppc_recomp_shared.h"
 #include "kernel/memory.h"
@@ -19,16 +20,23 @@
 #include "xex.h"
 #include <unordered_set>
 
+#ifdef _WIN32
+#include <ntstatus.h>
+#endif
+
 namespace Hooks
 {
     // structs
     // events
-    enum NTSTATUS
+
+    inline std::string ResolvePath(std::string fileName)
     {
-        NTSTATUS_SUCCESS = 0,
-        NTSTATUS_TIMEOUT = 1,
-        NTSTATUS_UNSUCCESSFUL = -1
-    };
+        fileName.erase(fileName.begin(), fileName.begin() + 3);
+
+        std::string fullPath = "game\\" + fileName;
+
+        return fullPath;
+    }
 
     struct Event final : KernelObject, HostObject<XKEVENT>
     {
@@ -81,10 +89,36 @@ namespace Hooks
             }
             else
             {
-                assert(false && "Unhandled timeout value.");
+                auto start = std::chrono::steady_clock::now();
+                auto end = start + std::chrono::milliseconds(timeout);
+
+                if (manualReset)
+                {
+                    while (!signaled)
+                    {
+                        if (std::chrono::steady_clock::now() >= end)
+                            return STATUS_TIMEOUT;
+
+                        signaled.wait(false);
+                    }
+                }
+                else
+                {
+                    while (true)
+                    {
+                        bool expected = true;
+                        if (signaled.compare_exchange_weak(expected, false))
+                            break;
+
+                        if (std::chrono::steady_clock::now() >= end)
+                            return STATUS_TIMEOUT;
+
+                        signaled.wait(expected);
+                    }
+                }
             }
 
-            return NTSTATUS_SUCCESS;
+            return STATUS_SUCCESS;
         }
 
         bool Set()
@@ -106,10 +140,13 @@ namespace Hooks
         }
     };
 
+    // Might need tweaking
     struct Semaphore final : KernelObject, HostObject<XKSEMAPHORE>
     {
         std::atomic<uint32_t> count;
         uint32_t maximumCount;
+        std::mutex mutex;
+        std::condition_variable cv;
 
         Semaphore(XKSEMAPHORE *semaphore)
             : count(semaphore->Header.SignalState), maximumCount(semaphore->Limit)
@@ -129,33 +166,34 @@ namespace Hooks
                 if (currentCount != 0)
                 {
                     if (count.compare_exchange_weak(currentCount, currentCount - 1))
-                        return NTSTATUS_SUCCESS;
+                        return STATUS_SUCCESS;
                 }
 
                 return STATUS_TIMEOUT;
             }
             else if (timeout == INFINITE)
             {
-                uint32_t currentCount;
-                while (true)
-                {
-                    currentCount = count.load();
-                    if (currentCount != 0)
-                    {
-                        if (count.compare_exchange_weak(currentCount, currentCount - 1))
-                            return NTSTATUS_SUCCESS;
-                    }
-                    else
-                    {
-                        count.wait(0);
-                    }
-                }
+                std::unique_lock<std::mutex> lock(mutex);
 
-                return NTSTATUS_SUCCESS;
+                cv.wait(lock, [this]()
+                        { return count.load() > 0; });
+
+                count.fetch_sub(1);
+                return STATUS_SUCCESS;
             }
             else
             {
-                assert(false && "Unhandled timeout value.");
+                std::unique_lock<std::mutex> lock(mutex);
+
+                if (cv.wait_for(lock, std::chrono::milliseconds(timeout),
+                                [this]()
+                                { return count.load() > 0; }))
+
+                {
+                    count.fetch_sub(1);
+                    return STATUS_SUCCESS;
+                }
+
                 return STATUS_TIMEOUT;
             }
         }
@@ -167,8 +205,15 @@ namespace Hooks
 
             assert(count + releaseCount <= maximumCount);
 
-            count += releaseCount;
-            count.notify_all();
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                count += releaseCount;
+            }
+
+            if (releaseCount == 1)
+                cv.notify_one();
+            else
+                cv.notify_all();
         }
     };
 
@@ -196,7 +241,7 @@ namespace Hooks
             if (ownerThreadId == currentThread)
             {
                 recursionCount++;
-                return NTSTATUS_SUCCESS;
+                return STATUS_SUCCESS;
             }
 
             if (timeout == 0)
@@ -207,7 +252,7 @@ namespace Hooks
                 signaled = false;
                 ownerThreadId = currentThread;
                 recursionCount = 1;
-                return NTSTATUS_SUCCESS;
+                return STATUS_SUCCESS;
             }
             else if (timeout == INFINITE)
             {
@@ -217,7 +262,7 @@ namespace Hooks
                 signaled = false;
                 ownerThreadId = currentThread;
                 recursionCount = 1;
-                return NTSTATUS_SUCCESS;
+                return STATUS_SUCCESS;
             }
             else
             {
@@ -273,7 +318,7 @@ namespace Hooks
                     return STATUS_TIMEOUT;
 
                 signaled = false;
-                return NTSTATUS_SUCCESS;
+                return STATUS_SUCCESS;
             }
             else if (timeout == INFINITE)
             {
@@ -281,12 +326,12 @@ namespace Hooks
                         { return signaled; });
 
                 signaled = false;
-                return NTSTATUS_SUCCESS;
+                return STATUS_SUCCESS;
             }
             else
             {
                 assert(false && "Unsupported timeout value");
-                return NTSTATUS_TIMEOUT;
+                return STATUS_TIMEOUT;
             }
         }
 
@@ -354,6 +399,50 @@ namespace Hooks
         {
             std::lock_guard<std::mutex> lock(mtx);
             return signaled;
+        }
+    };
+
+    struct FindHandle : KernelObject
+    {
+        std::error_code ec;
+        ankerl::unordered_dense::map<std::u8string, std::pair<size_t, bool>> searchResult; // Relative path, file size, is directory
+        decltype(searchResult)::iterator iterator;
+
+        FindHandle(const std::string_view &path)
+        {
+            auto addDirectory = [&](const std::filesystem::path &directory)
+            {
+                for (auto &entry : std::filesystem::directory_iterator(directory, ec))
+                {
+                    std::u8string relativePath = entry.path().lexically_relative(directory).u8string();
+                    searchResult.emplace(relativePath, std::make_pair(entry.is_directory(ec) ? 0 : entry.file_size(ec), entry.is_directory(ec)));
+                }
+            };
+
+            std::string_view pathNoPrefix = path;
+            size_t index = pathNoPrefix.find(":\\");
+
+            if (index != std::string_view::npos)
+                pathNoPrefix.remove_prefix(index + 2);
+
+            addDirectory(ResolvePath(std::string(path)));
+
+            iterator = searchResult.begin();
+        }
+
+        void fillFindData(WIN32_FIND_DATAA *lpFindFileData)
+        {
+            if (iterator->second.second)
+                lpFindFileData->dwFileAttributes = ByteSwap(FILE_ATTRIBUTE_DIRECTORY);
+            else
+                lpFindFileData->dwFileAttributes = ByteSwap(FILE_ATTRIBUTE_NORMAL);
+
+            strncpy(lpFindFileData->cFileName, (const char *)(iterator->first.c_str()), sizeof(lpFindFileData->cFileName));
+            lpFindFileData->nFileSizeLow = ByteSwap(uint32_t(iterator->second.first >> 32U));
+            lpFindFileData->nFileSizeHigh = ByteSwap(uint32_t(iterator->second.first));
+            lpFindFileData->ftCreationTime = {};
+            lpFindFileData->ftLastAccessTime = {};
+            lpFindFileData->ftLastWriteTime = {};
         }
     };
 
