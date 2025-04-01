@@ -1,3 +1,6 @@
 [submodule "external/SDL"]
 	path = external/SDL
 	url = https://github.com/libsdl-org/SDL
+[submodule "external/ankerl"]
+	path = external/ankerl
+	url = https://github.com/martinus/unordered_dense
