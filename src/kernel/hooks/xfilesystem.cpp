@@ -47,11 +47,6 @@ namespace Hooks
             return GetInvalidKernelObject<FileHandle>();
         }
 
-        if (filePath.extension() == ".vp6")
-        {
-            DebugBreak();
-        }
-
         FileHandle *fileHandle = CreateKernelObject<FileHandle>();
         fileHandle->stream = std::move(fileStream);
         fileHandle->path = std::move(filePath);
@@ -133,7 +128,7 @@ namespace Hooks
             }
         }
 
-        Log::Info("ReadFile", "Read ", numberOfBytesRead, " bytes from file -> ", hFile->path, ".");
+        // Log::Info("ReadFile", "Read ", numberOfBytesRead, " bytes from file -> ", hFile->path, ".");
 
         return result;
     }
@@ -258,9 +253,9 @@ namespace Hooks
         }
         else
         {
-            Log::Info("FindFirstFileA", "Searching for -> ", path);
+            Log::Error("FindFirstFileA", "Unknown search pattern -> ", path);
 
-            assert(!std::filesystem::path(path).has_extension() && "Unknown search pattern.");
+            // assert(!std::filesystem::path(path).has_extension() && "Unknown search pattern.");
         }
 
         FindHandle findHandle(path);
@@ -362,7 +357,14 @@ namespace Hooks
     {
         Log::Stub("IoDismountVolumeByFileHandle", "Called.");
     }
+
+    DWORD Hooks_GetFileAttributes(char *filePath)
+    {
+        return GetFileAttributesA(filePath);
+    }
 }
+
+GUEST_FUNCTION_HOOK(sub_82C74F28, Hooks::Hooks_GetFileAttributes)
 
 GUEST_FUNCTION_HOOK(sub_82C74DB8, Hooks::Import_FindFirstFileA)
 GUEST_FUNCTION_HOOK(sub_82C746A8, Hooks::Import_FindNextFileA)

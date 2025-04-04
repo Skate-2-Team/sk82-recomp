@@ -6,6 +6,7 @@ namespace Hooks
 
     XamListener::XamListener()
     {
+        Log::Info("XamListener", "Created listener: ", this);
         gListeners.insert(this);
     }
 

@@ -139,21 +139,6 @@ namespace Hooks
         owningThread.notify_one();
     }
 
-    void Import_KeWaitForMultipleObjects()
-    {
-        Log::Stub("KeWaitForMultipleObjects", "Called.");
-    }
-
-    void Import_KeInitializeSemaphore()
-    {
-        Log::Stub("KeInitializeSemaphore", "Called.");
-    }
-
-    void Import_KeReleaseSemaphore()
-    {
-        Log::Stub("KeReleaseSemaphore", "Called.");
-    }
-
     bool Import_RtlTryEnterCriticalSection(XRTL_CRITICAL_SECTION *cs)
     {
         uint32_t thisThread = PPCLocal::g_ppcContext->r13.u32;
@@ -172,11 +157,6 @@ namespace Hooks
         return false;
     }
 
-    void Import_KeTryToAcquireSpinLockAtRaisedIrql()
-    {
-        Log::Stub("KeTryToAcquireSpinLockAtRaisedIrql", "Called.");
-    }
-
     uint32_t Import_RtlInitializeCriticalSection(XRTL_CRITICAL_SECTION *cs)
     {
         cs->Header.Absolute = 0;
@@ -185,16 +165,6 @@ namespace Hooks
         cs->OwningThread = 0;
 
         return 0;
-    }
-
-    void Import_KeLockL2()
-    {
-        Log::Stub("KeLockL2", "Called.");
-    }
-
-    void Import_KeUnlockL2()
-    {
-        Log::Stub("KeUnlockL2", "Called.");
     }
 
     bool Import_KeSetEvent(XKEVENT *pEvent, uint32_t Increment, bool Wait)
@@ -235,29 +205,11 @@ namespace Hooks
 
         return STATUS_SUCCESS;
     }
-    void Import_KeReleaseSpinLockFromRaisedIrql()
-    {
-        Log::Stub("KeReleaseSpinLockFromRaisedIrql", "Called.");
-    }
-
-    void Import_KeAcquireSpinLockAtRaisedIrql()
-    {
-        Log::Stub("KeAcquireSpinLockAtRaisedIrql", "Called.");
-    }
-
-    void Import_KfReleaseSpinLock()
-    {
-        Log::Stub("KfReleaseSpinLock", "Called.");
-    }
-
-    void Import_KfAcquireSpinLock()
-    {
-        Log::Stub("KfAcquireSpinLock", "Called.");
-    }
 
     void Import_ExTerminateThread()
     {
-        Log::Stub("ExTerminateThread", "Called.");
+        // kill the current thread using std
+        ExitThread(0);
     }
 
     uint32_t Import_NtCreateEvent(be<uint32_t> *handle, void *objAttributes, uint32_t eventType, uint32_t initialState)
@@ -294,16 +246,6 @@ namespace Hooks
         }
 
         return STATUS_TIMEOUT;
-    }
-
-    void Import_KeLeaveCriticalRegion()
-    {
-        Log::Stub("KeLeaveCriticalRegion", "Called.");
-    }
-
-    void Import_KeEnterCriticalRegion()
-    {
-        Log::Stub("KeEnterCriticalRegion", "Called.");
     }
 
     uint32_t Import_KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int64_t> *Timeout)
@@ -426,7 +368,7 @@ namespace Hooks
 
     void Import_NtYieldExecution()
     {
-        Log::Stub("NtYieldExecution", "Called.");
+        std::this_thread::yield();
     }
 
     uint32_t Import_NtDuplicateObject(uint32_t hSourceHandle, void **lpTargetHandle, uint32_t dwOptions)
@@ -476,6 +418,62 @@ namespace Hooks
             }
         }
     }
+
+    // All of these are used by XAUDIO sdk funcs, no need to implement.
+    void Import_KeWaitForMultipleObjects()
+    {
+        Log::Stub("KeWaitForMultipleObjects", "Called.");
+    }
+
+    void Import_KeInitializeSemaphore()
+    {
+        Log::Stub("KeInitializeSemaphore", "Called.");
+    }
+
+    void Import_KeReleaseSemaphore()
+    {
+        Log::Stub("KeReleaseSemaphore", "Called.");
+    }
+
+    void Import_KeLockL2()
+    {
+        Log::Stub("KeLockL2", "Called.");
+    }
+
+    void Import_KeUnlockL2()
+    {
+        Log::Stub("KeUnlockL2", "Called.");
+    }
+
+    void Import_KeReleaseSpinLockFromRaisedIrql()
+    {
+        Log::Stub("KeReleaseSpinLockFromRaisedIrql", "Called.");
+    }
+
+    void Import_KeAcquireSpinLockAtRaisedIrql()
+    {
+        Log::Stub("KeAcquireSpinLockAtRaisedIrql", "Called.");
+    }
+
+    void Import_KfReleaseSpinLock()
+    {
+        Log::Stub("KfReleaseSpinLock", "Called.");
+    }
+
+    void Import_KfAcquireSpinLock()
+    {
+        Log::Stub("KfAcquireSpinLock", "Called.");
+    }
+
+    void Import_KeLeaveCriticalRegion()
+    {
+        Log::Stub("KeLeaveCriticalRegion", "Called.");
+    }
+
+    void Import_KeEnterCriticalRegion()
+    {
+        Log::Stub("KeEnterCriticalRegion", "Called.");
+    }
 }
 
 // RaiseException
@@ -511,7 +509,6 @@ GUEST_FUNCTION_HOOK(__imp__KfReleaseSpinLock, Hooks::Import_KfReleaseSpinLock)
 GUEST_FUNCTION_HOOK(__imp__KeWaitForMultipleObjects, Hooks::Import_KeWaitForMultipleObjects)
 GUEST_FUNCTION_HOOK(__imp__KeInitializeSemaphore, Hooks::Import_KeInitializeSemaphore)
 GUEST_FUNCTION_HOOK(__imp__KeReleaseSemaphore, Hooks::Import_KeReleaseSemaphore)
-GUEST_FUNCTION_HOOK(__imp__KeTryToAcquireSpinLockAtRaisedIrql, Hooks::Import_KeTryToAcquireSpinLockAtRaisedIrql)
 GUEST_FUNCTION_HOOK(__imp__KeAcquireSpinLockAtRaisedIrql, Hooks::Import_KeAcquireSpinLockAtRaisedIrql)
 GUEST_FUNCTION_HOOK(__imp__KeReleaseSpinLockFromRaisedIrql, Hooks::Import_KeReleaseSpinLockFromRaisedIrql)
 GUEST_FUNCTION_HOOK(__imp__KeWaitForSingleObject, Hooks::Import_KeWaitForSingleObject)

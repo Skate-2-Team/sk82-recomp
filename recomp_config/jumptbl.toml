@@ -12,6 +12,22 @@ labels = [
     0x823105B0,
 ]
 
+# Sk8::Physics::SkeletonController::EnterState
+[[switch]] 
+base = 0x82BAB0D8
+r = 4
+default = 0x82BAB360
+labels = [
+    0x82BAB110,
+    0x82BAB358,
+    0x82BAB34C,
+    0x82BAB1A0,
+    0x82BAB1AC,
+    0x82BAB24C,
+    0x82BAB27C,
+    0x82BAB33C,
+]
+
 # NFSMixShape::GetCurveOutput
 [[switch]] 
 base = 0x823D439C

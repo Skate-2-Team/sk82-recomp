@@ -67,8 +67,6 @@ void Video::WindowLoop()
             m_quit = true;
         }
     }
-
-    SampleRenderFrame();
 }
 
 // Just for debugs

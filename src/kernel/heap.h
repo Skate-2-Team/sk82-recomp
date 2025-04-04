@@ -29,6 +29,14 @@ public:
 
         void *ptr = o1heapAllocate(m_physicalHeap, size + alignment);
 
+        // PrintPhysicalHeapPercent();
+
+        if (o1heapGetDiagnostics(m_physicalHeap).oom_count > 0)
+        {
+            Log::Error("Heap", "Out of memory in physical heap, allocated: ", o1heapGetDiagnostics(m_physicalHeap).allocated, " capacity -> ", o1heapGetDiagnostics(m_physicalHeap).capacity);
+            DebugBreak();
+        }
+
         size_t aligned = (reinterpret_cast<size_t>(ptr) + alignment) & ~(alignment - 1);
 
         *(reinterpret_cast<void **>(aligned) - 1) = ptr;
@@ -57,6 +65,18 @@ public:
             return *(static_cast<size_t *>(ptr) - 2) - O1HEAP_ALIGNMENT; // relies on fragment header in o1heap.c
 
         return 0;
+    }
+
+    void PrintPhysicalHeapPercent()
+    {
+        O1HeapDiagnostics diagnostics = o1heapGetDiagnostics(m_physicalHeap);
+
+        Log::Info("Heap", diagnostics.allocated, " / ", diagnostics.capacity);
+
+        if (diagnostics.allocated > 623426240)
+        {
+            DebugBreak();
+        }
     }
 
     Heap()

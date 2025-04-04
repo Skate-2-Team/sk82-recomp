@@ -1,18 +1,29 @@
 #pragma once
 
 #include <windows.h>
+#include <d3dcompiler.h>
 #include <queue>
-#include "ppc/ppc_recomp_shared.h"
-#include "video.h"
+
 #include "kernel/function.h"
 #include "kernel/heap.h"
 #include "kernel/xbox.h"
+#include "ppc/ppc_recomp_shared.h"
+#include "video.h"
 #include "xex.h"
-#include <DirectXMath.h>
+
+#include "utils/tsqueue.h"
 
 namespace VideoHooks
 {
-    inline std::chrono::steady_clock::time_point m_frameStart;
+    struct Matrix4x4
+    {
+        float m[4][4];
+    };
+
+    struct Matrix4x4Swap
+    {
+        be<float> m[4][4];
+    };
 
     struct D3DRectSwapped
     {
@@ -41,70 +52,110 @@ namespace VideoHooks
         be<float> maxZ;
     };
 
-    enum XBOXPRIMITIVETYPE : __int32
+    struct __declspec(align(4)) VideoRenderable
     {
-        XD3DPT_POINTLIST = 0x1,
-        XD3DPT_LINELIST = 0x2,
-        XD3DPT_LINESTRIP = 0x3,
-        XD3DPT_TRIANGLELIST = 0x4,
-        XD3DPT_TRIANGLEFAN = 0x5,
-        XD3DPT_TRIANGLESTRIP = 0x6,
-        XD3DPT_RECTLIST = 0x8,
-        XD3DPT_QUADLIST = 0xD,
-        XD3DPT_FORCE_DWORD = 0x7FFFFFFF,
+        int mState;
+        unsigned int mMagicNumber;
+        uint32_t mData[3];
+        unsigned int mSize[3];
+        unsigned int mStride[3];
+        be<unsigned int> mWidth;
+        be<unsigned int> mHeight;
+        int mFormat;
+        be<int> mFrameNumber;
+        unsigned int mNumBuffersUsed;
+        be<int> mUseCount;
+        volatile bool mIsReadyToRender;
+        int mCBParams[2];
+        uint32_t mContext[3];
+        bool mDropFrameFlag;
+        bool mFlipFlag;
     };
 
-    enum _D3DBLOCKTYPE : __int32
+    inline void MatrixIdentity(Matrix4x4 *mat)
     {
-        D3DBLOCKTYPE_NONE = 0x0,
-        D3DBLOCKTYPE_PRIMARY_OVERRUN = 0x1,
-        D3DBLOCKTYPE_SECONDARY_OVERRUN = 0x2,
-        D3DBLOCKTYPE_SWAP_THROTTLE = 0x3,
-        D3DBLOCKTYPE_BLOCK_UNTIL_IDLE = 0x4,
-        D3DBLOCKTYPE_BLOCK_UNTIL_NOT_BUSY = 0x5,
-        D3DBLOCKTYPE_BLOCK_ON_FENCE = 0x6,
-        D3DBLOCKTYPE_VERTEX_SHADER_RELEASE = 0x7,
-        D3DBLOCKTYPE_PIXEL_SHADER_RELEASE = 0x8,
-        D3DBLOCKTYPE_VERTEX_BUFFER_RELEASE = 0x9,
-        D3DBLOCKTYPE_VERTEX_BUFFER_LOCK = 0xA,
-        D3DBLOCKTYPE_INDEX_BUFFER_RELEASE = 0xB,
-        D3DBLOCKTYPE_INDEX_BUFFER_LOCK = 0xC,
-        D3DBLOCKTYPE_TEXTURE_RELEASE = 0xD,
-        D3DBLOCKTYPE_TEXTURE_LOCK = 0xE,
-        D3DBLOCKTYPE_COMMAND_BUFFER_RELEASE = 0xF,
-        D3DBLOCKTYPE_COMMAND_BUFFER_LOCK = 0x10,
-        D3DBLOCKTYPE_CONSTANT_BUFFER_RELEASE = 0x11,
-        D3DBLOCKTYPE_CONSTANT_BUFFER_LOCK = 0x12,
-        D3DBLOCKTYPE_MAX = 0x13,
-    };
+        // Set all elements to zero first.
+        for (int i = 0; i < 4; ++i)
+        {
+            for (int j = 0; j < 4; ++j)
+                mat->m[i][j] = 0.0f;
+        }
+        // Set the diagonal to one.
+        for (int i = 0; i < 4; ++i)
+        {
+            mat->m[i][i] = 1.0f;
+        }
+    }
 
-    HRESULT Direct3D_CreateDevice(
-        unsigned int Adapter,
-        int DeviceType,
-        void *pUnused,
-        unsigned int BehaviorFlags,
-        void *pPresentationParameters,
-        void **ppReturnedDeviceInterface);
+    namespace Batches
+    {
+        // Batch Base
+        enum BatchType
+        {
+            BatchType_BeginVertices,
+            BatchType_SetViewPort,
+            BatchType_Unknown,
+        };
 
-    void *D3DDevice_CreateSurface(
-        unsigned int Width,
-        unsigned int Height,
-        _D3DFORMAT D3DFormat,
-        _D3DMULTISAMPLE_TYPE MultiSample,
-        const _D3DSURFACE_PARAMETERS *pParameters);
+        struct BatchInfo
+        {
+            BatchType m_type;
 
-    void *D3DDevice_CreateTexture(
-        unsigned int Width,
-        unsigned int Height,
-        unsigned int Depth,
-        unsigned int Levels,
-        unsigned int Usage,
-        signed int D3DFormat,
-        unsigned int Pool,
-        _D3DRESOURCETYPE D3DType);
+            BatchInfo(BatchType type) : m_type(type) {};
 
-    void D3DDevice_Swap(
-        void *pDevice,
-        void *pFrontBuffer,
-        const void *pParameters);
+            virtual ~BatchInfo() = default;
+            virtual void Process() = 0;
+        };
+
+        // Different types of Batches
+        struct BeginVerticesBatch : public BatchInfo
+        {
+            void *memory = nullptr;
+            size_t size = 0;
+            uint32_t primType = 0;
+            uint32_t vertexCount = 0;
+            uint32_t stride = 0;
+
+            BeginVerticesBatch() : BatchInfo(BatchType_BeginVertices) {};
+
+            ~BeginVerticesBatch() override
+            {
+                if (memory != nullptr)
+                {
+                    g_heap->Free(memory);
+                    memory = nullptr;
+                }
+            };
+
+            void Process() override;
+        };
+
+        struct SetViewPortBatch : public BatchInfo
+        {
+            D3DVIEWPORT9 viewport{};
+
+            SetViewPortBatch() : BatchInfo(BatchType_SetViewPort) {};
+            ~SetViewPortBatch() override = default;
+
+            void Process() override;
+        };
+    }
+
+    inline IDirect3DVertexShader9 *g_pVertexShader = nullptr;
+    inline IDirect3DPixelShader9 *g_pPixelShader = nullptr;
+    inline std::atomic<bool> g_isShaderLoaded = false;
+
+    inline Matrix4x4Swap *g_matVP = nullptr;
+
+    inline IDirect3DTexture9 *lumTex = nullptr;
+    inline IDirect3DTexture9 *blueTex = nullptr;
+    inline IDirect3DTexture9 *redTex = nullptr;
+
+    inline void *globalBuffer = nullptr;
+    inline int lastSize = 0;
+
+    inline bool g_sceneActive = false;
+
+    inline ThreadSafeQueue<Batches::BatchInfo *> batchQueue;
+    inline std::mutex queueMutex;
 }

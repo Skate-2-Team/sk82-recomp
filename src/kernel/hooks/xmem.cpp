@@ -86,31 +86,6 @@ namespace Hooks
         return address;
     }
 
-    void Import_NtQueryVirtualMemory()
-    {
-        Log::Stub("NtQueryVirtualMemory", "Called.");
-    }
-
-    void Import_NtAllocateVirtualMemory()
-    {
-        Log::Info("NtAllocateVirtualMemory", "Called.");
-    }
-
-    void Import_NtFreeVirtualMemory()
-    {
-        Log::Stub("NtFreeVirtualMemory", "Called.");
-    }
-
-    void Import_RtlFillMemoryUlong()
-    {
-        Log::Stub("RtlFillMemoryUlong", "Called.");
-    }
-
-    void Import_RtlCompareMemoryUlong()
-    {
-        Log::Stub("RtlCompareMemoryUlong", "Called.");
-    }
-
     // If we don't implement this, the EA allocator tries to allocate 4gb of heap space
     void Import_MmQueryStatistics(_MM_STATISTICS *statistics)
     {
@@ -196,6 +171,31 @@ namespace Hooks
     void Import_ExFreePool()
     {
         Log::Stub("ExFreePool", "Called.");
+    }
+
+    void Import_NtQueryVirtualMemory()
+    {
+        Log::Stub("NtQueryVirtualMemory", "Called.");
+    }
+
+    void Import_NtAllocateVirtualMemory()
+    {
+        Log::Info("NtAllocateVirtualMemory", "Called.");
+    }
+
+    void Import_NtFreeVirtualMemory()
+    {
+        Log::Info("NtFreeVirtualMemory", "TRYING TO FREE.");
+    }
+
+    void Import_RtlFillMemoryUlong()
+    {
+        Log::Stub("RtlFillMemoryUlong", "Called.");
+    }
+
+    void Import_RtlCompareMemoryUlong()
+    {
+        Log::Stub("RtlCompareMemoryUlong", "Called.");
     }
 }
 

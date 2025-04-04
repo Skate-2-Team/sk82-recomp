@@ -34,6 +34,8 @@ int main()
         GuestThread::Start({Loader::m_startAddress, 0, 0});
     }
 
+    Log::Info("Main", "Waiting for threads to finish...");
+
     std::cin.get();
 
     return 0;

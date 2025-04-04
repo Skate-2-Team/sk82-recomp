@@ -72,6 +72,7 @@ target_link_libraries(${TARGET_NAME}
     unordered_dense::unordered_dense
     d3d9 
     o1heap
+    d3dcompiler
 )
 
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 23)

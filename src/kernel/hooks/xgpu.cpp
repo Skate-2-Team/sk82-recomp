@@ -8,9 +8,9 @@ namespace Hooks
         xvideoMode->dwDisplayWidth = 1280;
         xvideoMode->dwDisplayHeight = 720;
         xvideoMode->fIsInterlaced = 0;
-        xvideoMode->fIsWideScreen = 0;
+        xvideoMode->fIsWideScreen = 1;
         xvideoMode->fIsHiDef = 1;
-        xvideoMode->RefreshRate = 0x42700000;
+        xvideoMode->RefreshRate = 60;
         xvideoMode->VideoStandard = 0;
     }
 
