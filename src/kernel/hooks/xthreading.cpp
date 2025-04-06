@@ -1,5 +1,9 @@
 #include "hooks.h"
 
+// Again thanks to Unleashed Recompiled for majority of the original implementations <3
+// https://github.com/hedge-dev/UnleashedRecomp/blob/main/UnleashedRecomp/kernel/imports.cpp
+// all credits where credits are due <3
+
 namespace Hooks
 {
     static std::atomic<uint32_t> g_keSetEventGeneration;
@@ -208,7 +212,6 @@ namespace Hooks
 
     void Import_ExTerminateThread()
     {
-        // kill the current thread using std
         ExitThread(0);
     }
 
@@ -419,22 +422,101 @@ namespace Hooks
         }
     }
 
-    // All of these are used by XAUDIO sdk funcs, no need to implement.
-    void Import_KeWaitForMultipleObjects()
+    // Unleashed recompiled states this function only handles event objects, which is fine because we only use events.
+    uint32_t Import_KeWaitForMultipleObjects(uint32_t Count, xpointer<XDISPATCHER_HEADER> *Objects, uint32_t WaitType, uint32_t WaitReason, uint32_t WaitMode, uint32_t Alertable, be<int64_t> *Timeout)
     {
-        Log::Stub("KeWaitForMultipleObjects", "Called.");
+        const uint64_t timeout = GuestTimeoutToMilliseconds(Timeout);
+        assert(timeout == INFINITE);
+
+        if (WaitType == 0) // Wait all
+        {
+            for (size_t i = 0; i < Count; i++)
+                QueryKernelObject<Event>(*Objects[i])->Wait(timeout);
+        }
+        else
+        {
+            thread_local std::vector<Event *> s_events;
+            s_events.resize(Count);
+
+            for (size_t i = 0; i < Count; i++)
+                s_events[i] = QueryKernelObject<Event>(*Objects[i]);
+
+            while (true)
+            {
+                uint32_t generation = g_keSetEventGeneration.load();
+
+                for (size_t i = 0; i < Count; i++)
+                {
+                    if (s_events[i]->Wait(0) == STATUS_SUCCESS)
+                    {
+                        return STATUS_WAIT_0 + i;
+                    }
+                }
+
+                g_keSetEventGeneration.wait(generation);
+            }
+        }
+
+        return STATUS_SUCCESS;
     }
 
-    void Import_KeInitializeSemaphore()
+    void Import_KeInitializeSemaphore(XKSEMAPHORE *semaphore, uint32_t count, uint32_t limit)
     {
-        Log::Stub("KeInitializeSemaphore", "Called.");
+        semaphore->Header.Type = 5;
+        semaphore->Header.SignalState = count;
+        semaphore->Limit = limit;
+
+        auto *object = QueryKernelObject<Semaphore>(semaphore->Header);
     }
 
-    void Import_KeReleaseSemaphore()
+    uint32_t Import_KeReleaseSemaphore(XKSEMAPHORE *semaphore, uint32_t increment, uint32_t adjustment, uint32_t wait)
     {
-        Log::Stub("KeReleaseSemaphore", "Called.");
+        auto *object = QueryKernelObject<Semaphore>(semaphore->Header);
+        object->Release(adjustment, nullptr);
+        return STATUS_SUCCESS;
     }
 
+    void Import_KeReleaseSpinLockFromRaisedIrql(uint32_t *spinLock)
+    {
+        std::atomic_ref spinLockRef(*spinLock);
+        spinLockRef = 0;
+    }
+
+    void Import_KeAcquireSpinLockAtRaisedIrql(uint32_t *spinLock)
+    {
+        std::atomic_ref spinLockRef(*spinLock);
+
+        while (true)
+        {
+            uint32_t expected = 0;
+            if (spinLockRef.compare_exchange_weak(expected, PPCLocal::g_ppcContext->r13.u32))
+                break;
+
+            std::this_thread::yield();
+        }
+    }
+
+    void Import_KfReleaseSpinLock(uint32_t *spinLock)
+    {
+        std::atomic_ref spinLockRef(*spinLock);
+        spinLockRef = 0;
+    }
+
+    void Import_KfAcquireSpinLock(uint32_t *spinLock)
+    {
+        std::atomic_ref spinLockRef(*spinLock);
+
+        while (true)
+        {
+            uint32_t expected = 0;
+            if (spinLockRef.compare_exchange_weak(expected, PPCLocal::g_ppcContext->r13.u32))
+                break;
+
+            std::this_thread::yield();
+        }
+    }
+
+    // Used by D3D functions
     void Import_KeLockL2()
     {
         Log::Stub("KeLockL2", "Called.");
@@ -445,26 +527,7 @@ namespace Hooks
         Log::Stub("KeUnlockL2", "Called.");
     }
 
-    void Import_KeReleaseSpinLockFromRaisedIrql()
-    {
-        Log::Stub("KeReleaseSpinLockFromRaisedIrql", "Called.");
-    }
-
-    void Import_KeAcquireSpinLockAtRaisedIrql()
-    {
-        Log::Stub("KeAcquireSpinLockAtRaisedIrql", "Called.");
-    }
-
-    void Import_KfReleaseSpinLock()
-    {
-        Log::Stub("KfReleaseSpinLock", "Called.");
-    }
-
-    void Import_KfAcquireSpinLock()
-    {
-        Log::Stub("KfAcquireSpinLock", "Called.");
-    }
-
+    // Used by MountUtilityDrive
     void Import_KeLeaveCriticalRegion()
     {
         Log::Stub("KeLeaveCriticalRegion", "Called.");

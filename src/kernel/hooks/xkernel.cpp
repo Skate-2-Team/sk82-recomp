@@ -5,8 +5,6 @@ namespace Hooks
 
     void Hooks_RtlOutputDebugString(_STRING *p_outputString)
     {
-        Log::Info("Imports->RtlOutputDebugString", "Address is -> ", (void *)p_outputString);
-
         OutputDebugStringA((char *)p_outputString->Buffer);
 
         Log::Info("Imports->OutDebugString", p_outputString->Buffer);
@@ -65,24 +63,17 @@ namespace Hooks
         }
     }
 
-    void Import_RtlFreeAnsiString()
+    uint32_t Import_RtlMultiByteToUnicodeN(be<uint16_t> *UnicodeString, uint32_t MaxBytesInUnicodeString, be<uint32_t> *BytesInUnicodeString, const char *MultiByteString, uint32_t BytesInMultiByteString)
     {
-        Log::Stub("RtlFreeAnsiString", "Called.");
-    }
+        uint32_t length = (std::min)(MaxBytesInUnicodeString / 2, BytesInMultiByteString);
 
-    void Import_RtlUnicodeStringToAnsiString()
-    {
-        Log::Stub("RtlUnicodeStringToAnsiString", "Called.");
-    }
+        for (size_t i = 0; i < length; i++)
+            UnicodeString[i] = MultiByteString[i];
 
-    void Import_RtlInitUnicodeString()
-    {
-        Log::Stub("RtlInitUnicodeString", "Called.");
-    }
+        if (BytesInUnicodeString != nullptr)
+            *BytesInUnicodeString = length * 2;
 
-    void Import_RtlMultiByteToUnicodeN()
-    {
-        Log::Stub("RtlMultiByteToUnicodeN", "Called.");
+        return STATUS_SUCCESS;
     }
 
     void Import_ExRegisterTitleTerminateNotification()
@@ -102,7 +93,14 @@ namespace Hooks
 
     void Import_KeBugCheck()
     {
-        Log::Stub("KeBugCheck", "Called.");
+        Log::Error("KeBugCheck", "Bug check from Kernel.");
+        DebugBreak();
+    }
+
+    void Import_KeBugCheckEx()
+    {
+        Log::Error("KeBugCheck", "Bug check from Kernel.");
+        DebugBreak();
     }
 
     void Import_HalReturnToFirmware()
@@ -110,14 +108,14 @@ namespace Hooks
         Log::Stub("HalReturnToFirmware", "Called.");
     }
 
-    void Import_XexCheckExecutablePrivilege()
+    uint32_t Import_XexCheckExecutablePrivilege()
     {
-        Log::Stub("XexCheckExecutablePrivilege", "Called.");
+        return 0;
     }
 
     void Import_RtlNtStatusToDosError()
     {
-        Log::Stub("RtlNtStatusToDosError", "Called.");
+        // Log::Stub("RtlNtStatusToDosError", "Called.");
     }
 
     void Import_RtlUnicodeToMultiByteN()
@@ -130,14 +128,9 @@ namespace Hooks
         Log::Stub("RtlImageXexHeaderField", "Called.");
     }
 
-    void Import_KeBugCheckEx()
+    uint32_t Import_KeGetCurrentProcessType()
     {
-        Log::Stub("KeBugCheckEx", "Called.");
-    }
-
-    void Import_KeGetCurrentProcessType()
-    {
-        Log::Stub("KeGetCurrentProcessType", "Called.");
+        return 1;
     }
 
     void Import_RtlRaiseException()
@@ -167,7 +160,7 @@ namespace Hooks
 
     void Import_ObDereferenceObject()
     {
-        Log::Stub("ObDereferenceObject", "Called.");
+        // Log::Stub("ObDereferenceObject", "Called.");
     }
 
     void Import_RtlTimeToTimeFields()
@@ -175,9 +168,13 @@ namespace Hooks
         Log::Stub("RtlTimeToTimeFields", "Called.");
     }
 
-    void Import_KeQuerySystemTime()
+    void Import_KeQuerySystemTime(FILETIME *SystemTime)
     {
-        Log::Stub("KeQuerySystemTime", "Called.");
+        GetSystemTimeAsFileTime(SystemTime);
+
+        // byte swap
+        SystemTime->dwLowDateTime = ByteSwap(SystemTime->dwLowDateTime);
+        SystemTime->dwHighDateTime = ByteSwap(SystemTime->dwHighDateTime);
     }
 
     void Import_KiApcNormalRoutineNop()
@@ -192,18 +189,12 @@ namespace Hooks
 
     void Import_DbgBreakPoint()
     {
-        Log::Stub("DbgBreakPoint", "Called.");
         DebugBreak();
     }
 
     void Import_RtlUnwind()
     {
         Log::Stub("RtlUnwind", "Called.");
-    }
-
-    void Import_KeEnableFpuExceptions()
-    {
-        Log::Stub("KeEnableFpuExceptions", "Called.");
     }
 
     void Import_XMAReleaseContext()
@@ -221,36 +212,12 @@ namespace Hooks
         Log::Stub("RtlCaptureContext", "Called.");
     }
 
-    void Import_XAudioRegisterRenderDriverClient()
+    uint32_t Import_KeRaiseIrqlToDpcLevel()
     {
-        Log::Stub("XAudioRegisterRenderDriverClient", "Called.");
+        return 0;
     }
 
-    void Import_XAudioUnregisterRenderDriverClient()
-    {
-        Log::Stub("XAudioUnregisterRenderDriverClient", "Called.");
-    }
-
-    void Import_XAudioSubmitRenderDriverFrame()
-    {
-        Log::Stub("XAudioSubmitRenderDriverFrame", "Called.");
-    }
-
-    void Import_XAudioGetVoiceCategoryVolume()
-    {
-        Log::Stub("XAudioGetVoiceCategoryVolume", "Called.");
-    }
-
-    void Import_XAudioGetVoiceCategoryVolumeChangeMask()
-    {
-        Log::Stub("XAudioGetVoiceCategoryVolumeChangeMask", "Called.");
-    }
-
-    void Import_KeRaiseIrqlToDpcLevel()
-    {
-        Log::Stub("KeRaiseIrqlToDpcLevel", "Called.");
-    }
-
+    // interrupt handling
     void Import_KfLowerIrql()
     {
         Log::Stub("KfLowerIrql", "Called.");
@@ -264,11 +231,6 @@ namespace Hooks
     void Import_VSNPrintf()
     {
         Log::Stub("VSNPrintf", "Called.");
-    }
-
-    void Import_XAudioGetSpeakerConfig()
-    {
-        Log::Stub("XAudioGetSpeakerConfig", "Called.");
     }
 
     void Import_XMADisableContext()
@@ -381,9 +343,9 @@ namespace Hooks
         Log::Stub("_snprintf", "Called.");
     }
 
-    void Import_FscSetCacheElementCount()
+    uint32_t Import_FscSetCacheElementCount()
     {
-        Log::Stub("FscSetCacheElementCount", "Called.");
+        return 1;
     }
 
     void Import_IoCheckShareAccess()
@@ -855,7 +817,6 @@ GUEST_FUNCTION_HOOK(__imp__KeQueryPerformanceFrequency, Hooks::Import_KeQueryPer
 GUEST_FUNCTION_HOOK(__imp__KeGetCurrentProcessType, Hooks::Import_KeGetCurrentProcessType)
 GUEST_FUNCTION_HOOK(__imp__KeRaiseIrqlToDpcLevel, Hooks::Import_KeRaiseIrqlToDpcLevel)
 GUEST_FUNCTION_HOOK(__imp__KeQuerySystemTime, Hooks::Import_KeQuerySystemTime)
-GUEST_FUNCTION_HOOK(__imp__KeEnableFpuExceptions, Hooks::Import_KeEnableFpuExceptions)
 GUEST_FUNCTION_HOOK(__imp__KiApcNormalRoutineNop, Hooks::Import_KiApcNormalRoutineNop)
 GUEST_FUNCTION_HOOK(__imp__KfLowerIrql, Hooks::Import_KfLowerIrql)
 
@@ -863,14 +824,7 @@ GUEST_FUNCTION_HOOK(__imp__XexCheckExecutablePrivilege, Hooks::Import_XexCheckEx
 GUEST_FUNCTION_HOOK(__imp__XexGetProcedureAddress, Hooks::Import_XexGetProcedureAddress)
 GUEST_FUNCTION_HOOK(__imp__XexGetModuleSection, Hooks::Import_XexGetModuleSection)
 GUEST_FUNCTION_HOOK(__imp__XexGetModuleHandle, Hooks::Import_XexGetModuleHandle)
-
-GUEST_FUNCTION_HOOK(__imp__XAudioGetSpeakerConfig, Hooks::Import_XAudioGetSpeakerConfig)
 GUEST_FUNCTION_HOOK(__imp__XNotifyDelayUI, Hooks::Import_XNotifyDelayUI)
-GUEST_FUNCTION_HOOK(__imp__XAudioRegisterRenderDriverClient, Hooks::Import_XAudioRegisterRenderDriverClient)
-GUEST_FUNCTION_HOOK(__imp__XAudioUnregisterRenderDriverClient, Hooks::Import_XAudioUnregisterRenderDriverClient)
-GUEST_FUNCTION_HOOK(__imp__XAudioSubmitRenderDriverFrame, Hooks::Import_XAudioSubmitRenderDriverFrame)
-GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolume, Hooks::Import_XAudioGetVoiceCategoryVolume)
-GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolumeChangeMask, Hooks::Import_XAudioGetVoiceCategoryVolumeChangeMask)
 
 GUEST_FUNCTION_HOOK(__imp__RtlNtStatusToDosError, Hooks::Import_RtlNtStatusToDosError)
 GUEST_FUNCTION_HOOK(__imp__RtlUnicodeToMultiByteN, Hooks::Import_RtlUnicodeToMultiByteN)
@@ -878,9 +832,6 @@ GUEST_FUNCTION_HOOK(__imp__RtlImageXexHeaderField, Hooks::Import_RtlImageXexHead
 GUEST_FUNCTION_HOOK(__imp__RtlRaiseException, Hooks::Import_RtlRaiseException)
 GUEST_FUNCTION_HOOK(__imp__RtlTimeToTimeFields, Hooks::Import_RtlTimeToTimeFields)
 GUEST_FUNCTION_HOOK(__imp__RtlInitAnsiString, Hooks::Import_RtlInitAnsiString)
-GUEST_FUNCTION_HOOK(__imp__RtlFreeAnsiString, Hooks::Import_RtlFreeAnsiString)
-GUEST_FUNCTION_HOOK(__imp__RtlUnicodeStringToAnsiString, Hooks::Import_RtlUnicodeStringToAnsiString)
-GUEST_FUNCTION_HOOK(__imp__RtlInitUnicodeString, Hooks::Import_RtlInitUnicodeString)
 GUEST_FUNCTION_HOOK(__imp__RtlMultiByteToUnicodeN, Hooks::Import_RtlMultiByteToUnicodeN)
 GUEST_FUNCTION_HOOK(__imp__RtlCaptureContext, Hooks::Import_RtlCaptureContext)
 GUEST_FUNCTION_HOOK(__imp__RtlUnwind, Hooks::Import_RtlUnwind)

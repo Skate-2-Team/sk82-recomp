@@ -78,4 +78,4 @@ target_link_libraries(${TARGET_NAME}
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 23)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
 
-target_compile_options(${TARGET_NAME} PRIVATE -msse4.1 -msse4.2 -mavx -m64)
+target_compile_options(${TARGET_NAME} PRIVATE -msse4.1 -msse4.2 -mavx -mavx2 -m64)

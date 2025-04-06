@@ -2,6 +2,43 @@
 
 #include "xex.h"
 
+// Content types
+#define XCONTENTTYPE_SAVEDATA 1
+#define XCONTENTTYPE_DLC 2
+#define XCONTENTTYPE_RESERVED 3
+
+#define XCONTENT_NEW 1
+#define XCONTENT_EXISTING 2
+
+#define XCONTENT_MAX_DISPLAYNAME 128
+#define XCONTENT_MAX_FILENAME 42
+#define XCONTENTDEVICE_MAX_NAME 27
+
+#define MSG_AREA(msgid) (((msgid) >> 16) & 0xFFFF)
+
+#define XCONTENTDEVICETYPE_HDD 1
+#define XCONTENTDEVICETYPE_MU 2
+
+// Direct reflection of XInput structures
+
+#define XAMINPUT_DEVTYPE_GAMEPAD 0x01
+#define XAMINPUT_DEVSUBTYPE_GAMEPAD 0x01
+
+#define XAMINPUT_GAMEPAD_DPAD_UP 0x0001
+#define XAMINPUT_GAMEPAD_DPAD_DOWN 0x0002
+#define XAMINPUT_GAMEPAD_DPAD_LEFT 0x0004
+#define XAMINPUT_GAMEPAD_DPAD_RIGHT 0x0008
+#define XAMINPUT_GAMEPAD_START 0x0010
+#define XAMINPUT_GAMEPAD_BACK 0x0020
+#define XAMINPUT_GAMEPAD_LEFT_THUMB 0x0040
+#define XAMINPUT_GAMEPAD_RIGHT_THUMB 0x0080
+#define XAMINPUT_GAMEPAD_LEFT_SHOULDER 0x0100
+#define XAMINPUT_GAMEPAD_RIGHT_SHOULDER 0x0200
+#define XAMINPUT_GAMEPAD_A 0x1000
+#define XAMINPUT_GAMEPAD_B 0x2000
+#define XAMINPUT_GAMEPAD_X 0x4000
+#define XAMINPUT_GAMEPAD_Y 0x8000
+
 inline struct _STRING
 {
     unsigned __int16 Length;
@@ -111,7 +148,6 @@ typedef struct _XKSEMAPHORE
 
 typedef XDISPATCHER_HEADER XKEVENT;
 
-extern "C" void *MmGetHostAddress(uint32_t ptr);
 template <typename T>
 struct xpointer
 {
@@ -132,7 +168,7 @@ struct xpointer
             return nullptr;
         }
 
-        return reinterpret_cast<T *>(MmGetHostAddress(ptr));
+        return reinterpret_cast<T *>(Memory::MmGetHostAddress(ptr));
     }
 
     operator T *() const
@@ -215,19 +251,14 @@ struct _MM_STATISTICS
     be<unsigned int> HighestPhysicalPage;
 };
 
-// Content types
-#define XCONTENTTYPE_SAVEDATA 1
-#define XCONTENTTYPE_DLC 2
-#define XCONTENTTYPE_RESERVED 3
-
-#define XCONTENT_NEW 1
-#define XCONTENT_EXISTING 2
-
-#define XCONTENT_MAX_DISPLAYNAME 128
-#define XCONTENT_MAX_FILENAME 42
-#define XCONTENTDEVICE_MAX_NAME 27
-
-#define MSG_AREA(msgid) (((msgid) >> 16) & 0xFFFF)
+typedef struct _XDEVICE_DATA
+{
+    be<uint32_t> DeviceID;
+    be<uint32_t> DeviceType;
+    be<uint64_t> ulDeviceBytes;
+    be<uint64_t> ulDeviceFreeBytes;
+    be<uint16_t> wszName[XCONTENTDEVICE_MAX_NAME];
+} XDEVICE_DATA, *PXDEVICE_DATA;
 
 typedef struct _XXOVERLAPPED
 {
@@ -269,26 +300,6 @@ typedef struct _XUSER_SIGNIN_INFO
     be<uint32_t> dwField14;
     char Name[16];
 } XUSER_SIGNIN_INFO;
-
-// Direct reflection of XInput structures
-
-#define XAMINPUT_DEVTYPE_GAMEPAD 0x01
-#define XAMINPUT_DEVSUBTYPE_GAMEPAD 0x01
-
-#define XAMINPUT_GAMEPAD_DPAD_UP 0x0001
-#define XAMINPUT_GAMEPAD_DPAD_DOWN 0x0002
-#define XAMINPUT_GAMEPAD_DPAD_LEFT 0x0004
-#define XAMINPUT_GAMEPAD_DPAD_RIGHT 0x0008
-#define XAMINPUT_GAMEPAD_START 0x0010
-#define XAMINPUT_GAMEPAD_BACK 0x0020
-#define XAMINPUT_GAMEPAD_LEFT_THUMB 0x0040
-#define XAMINPUT_GAMEPAD_RIGHT_THUMB 0x0080
-#define XAMINPUT_GAMEPAD_LEFT_SHOULDER 0x0100
-#define XAMINPUT_GAMEPAD_RIGHT_SHOULDER 0x0200
-#define XAMINPUT_GAMEPAD_A 0x1000
-#define XAMINPUT_GAMEPAD_B 0x2000
-#define XAMINPUT_GAMEPAD_X 0x4000
-#define XAMINPUT_GAMEPAD_Y 0x8000
 
 typedef struct _XAMINPUT_GAMEPAD
 {

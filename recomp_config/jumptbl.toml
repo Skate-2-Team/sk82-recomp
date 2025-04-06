@@ -12,6 +12,34 @@ labels = [
     0x823105B0,
 ]
 
+# rw::physics::JointJacobian::Build
+[[switch]] 
+base = 0x8293E5F4
+r = 21
+default = 0x8293E990
+labels = [
+    0x8293E61C,
+    0x8293E6E8,
+    0x8293E7C8,
+    0x8293E8EC,
+]
+
+# Sk8::Behaviours::ApplyFilter
+[[switch]] 
+base = 0x82AA5638
+r = 4
+default = 0x82AA574C
+labels = [
+    0x82AA5750,
+    0x82AA5670,
+    0x82AA5684,
+    0x82AA568C,
+    0x82AA56B0,
+    0x82AA56D4,
+    0x82AA56F4,
+    0x82AA5724,
+]
+
 # Sk8::Physics::SkeletonController::EnterState
 [[switch]] 
 base = 0x82BAB0D8

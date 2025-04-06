@@ -3,6 +3,7 @@
 namespace Hooks
 {
     static std::unordered_set<XamListener *> gListeners{};
+    static uint64_t gXUID = 0xB13EBABEBABEBABE;
 
     XamListener::XamListener()
     {
@@ -35,9 +36,20 @@ namespace Hooks
         Log::Stub("XamContentCreateEnumerator", "Called.");
     }
 
-    void Import_XamContentGetDeviceData()
+    uint32_t Import_XamContentGetDeviceData(uint32_t DeviceID, XDEVICE_DATA *pDeviceData)
     {
-        Log::Stub("XamContentGetDeviceData", "Called.");
+        pDeviceData->DeviceID = DeviceID;
+        pDeviceData->DeviceType = XCONTENTDEVICETYPE_HDD;
+        pDeviceData->ulDeviceBytes = 0x10000000;
+        pDeviceData->ulDeviceFreeBytes = 0x10000000;
+        pDeviceData->wszName[0] = 'S';
+        pDeviceData->wszName[1] = 'k';
+        pDeviceData->wszName[2] = 'a';
+        pDeviceData->wszName[3] = 't';
+        pDeviceData->wszName[4] = 'e';
+        pDeviceData->wszName[5] = '\0';
+
+        return 0;
     }
 
     void Import_XamEnumerate()
@@ -100,9 +112,15 @@ namespace Hooks
         Log::Stub("XamUserCreateStatsEnumerator", "Called.");
     }
 
-    void Import_XamUserGetXUID()
+    DWORD Import_XamUserGetXUID(DWORD dwUserIndex, uint64_t *pXuid)
     {
-        Log::Stub("XamUserGetXUID", "Called.");
+        /*
+        if (pXuid != nullptr)
+        {
+            *pXuid = ByteSwap(gXUID);
+        }*/
+
+        return S_OK;
     }
 
     void Import_XamEnableInactivityProcessing()
@@ -252,9 +270,9 @@ namespace Hooks
         Log::Stub("XMsgStartIORequest", "Called.");
     }
 
-    void Import_XGetGameRegion()
+    uint32_t Import_XGetGameRegion()
     {
-        Log::Stub("XGetGameRegion", "Called.");
+        return 0x03FF;
     }
 
     void Import_XMsgCancelIORequest()
@@ -262,14 +280,14 @@ namespace Hooks
         Log::Stub("XMsgCancelIORequest", "Called.");
     }
 
-    void Import_XGetLanguage()
+    uint32_t Import_XGetLanguage()
     {
-        Log::Stub("XGetLanguage", "Called.");
+        return 1;
     }
 
-    void Import_XGetAVPack()
+    uint32_t Import_XGetAVPack()
     {
-        Log::Stub("XGetAVPack", "Called.");
+        return 0;
     }
 
     void Import_XamShowKeyboardUI()
@@ -318,7 +336,7 @@ namespace Hooks
             *isCreator = true;
 
         if (xuid)
-            *xuid = 0xB13EBABEBABEBABE;
+            *xuid = gXUID;
 
         return 0;
     }
@@ -333,7 +351,7 @@ namespace Hooks
         if (userIndex == 0)
         {
             memset(info, 0, sizeof(*info));
-            info->xuid = 0xB13EBABEBABEBABE;
+            info->xuid = gXUID;
             info->SigninState = 1;
             strcpy(info->Name, "SK8");
             return 0;

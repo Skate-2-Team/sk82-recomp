@@ -27,6 +27,10 @@ namespace Memory
     PPCFunc *FindFunction(uint32_t guest) noexcept;
     void InsertFunction(uint32_t guest, PPCFunc *host);
 
+    inline void *MmGetHostAddress(uint32_t ptr)
+    {
+        return Translate(ptr);
+    }
 }
 
 extern PPCFuncMapping PPCFuncMappings[];

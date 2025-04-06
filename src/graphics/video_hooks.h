@@ -58,12 +58,12 @@ namespace VideoHooks
         unsigned int mMagicNumber;
         uint32_t mData[3];
         unsigned int mSize[3];
-        unsigned int mStride[3];
+        be<unsigned int> mStride[3];
         be<unsigned int> mWidth;
         be<unsigned int> mHeight;
         int mFormat;
         be<int> mFrameNumber;
-        unsigned int mNumBuffersUsed;
+        be<unsigned int> mNumBuffersUsed;
         be<int> mUseCount;
         volatile bool mIsReadyToRender;
         int mCBParams[2];

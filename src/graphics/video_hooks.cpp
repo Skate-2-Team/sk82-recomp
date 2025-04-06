@@ -131,7 +131,7 @@ namespace VideoHooks
         // to stop crashing
         *ppReturnedDeviceInterface = (void *)Memory::MapVirtual(g_heap->AllocPhysical(22272, 128));
 
-        return 1;
+        return ERROR_SUCCESS;
     }
 
     PPC_FUNC_IMPL(__imp__sub_825E5538);
@@ -184,9 +184,29 @@ namespace VideoHooks
         return S_OK;
     }
 
+    void DumpYUVFrame(const char *filename, uint8_t *yPlane, uint8_t *uPlane, uint8_t *vPlane, int width, int height)
+    {
+        FILE *f = fopen(filename, "wb");
+        if (!f)
+        {
+            std::cerr << "Failed to open YUV output file!" << std::endl;
+            return;
+        }
+
+        size_t ySize = width * height;
+        size_t uvSize = (width / 2) * (height / 2);
+
+        fwrite(yPlane, 1, ySize, f);
+        fwrite(uPlane, 1, uvSize, f);
+        fwrite(vPlane, 1, uvSize, f);
+
+        fclose(f);
+    }
+
     PPC_FUNC_IMPL(__imp__sub_8257AA38);
     void VideoRenderer_RwTexture_Render(void *thisPtr, VideoRenderable *videoRenderable, int vp6Border)
     {
+
         // Log::Info("VideoRenderer_RwTexture_Render", "Rendering frame -> ", videoRenderable->mFrameNumber);
 
         // convert data vars
@@ -194,13 +214,17 @@ namespace VideoHooks
         uint8_t *data1 = (uint8_t *)Memory::Translate<uint8_t *>(ByteSwap(videoRenderable->mData[1]));
         uint8_t *data2 = (uint8_t *)Memory::Translate<uint8_t *>(ByteSwap(videoRenderable->mData[2]));
 
-        // Log::Info("VideoRenderer_RwTexture_Render", "Data0 -> ", (void *)data0, ", Data1 -> ", (void *)data1, ", Data2 -> ", (void *)data2);
+        // print addresses
+
+        // Log::Info("VideoRenderer_RwTexture_Render", "Data0: ", (void *)data0, ", Data1: ", (void *)data1, ", Data2: ", (void *)data2);
 
         int chromaIndex = (((videoRenderable->mWidth + 2) * vp6Border) >> 2);
 
-        uint8_t *lumBuffer = &data0[(videoRenderable->mWidth + 1) * 0];
+        uint8_t *lumBuffer = &data0[(videoRenderable->mWidth + 1) * vp6Border];
         uint8_t *uChroma = &data1[chromaIndex];
         uint8_t *vChroma = &data2[chromaIndex];
+
+        // print num buffers used
 
         HRESULT hrY = FillTextureDataRaw(lumTex, videoRenderable->mWidth, videoRenderable->mHeight, lumBuffer);
         if (FAILED(hrY))
@@ -235,9 +259,7 @@ namespace VideoHooks
     {
         void SetViewPortBatch::Process()
         {
-            Log::Info("SetViewPortBatch", "Setting viewport -> width: ", viewport.Width, ", height: ", viewport.Height);
-
-            // g_video->m_d3dDevice->SetViewport(&viewport);
+            g_video->m_d3dDevice->SetViewport(&viewport);
         }
 
         void BeginVerticesBatch::Process()
@@ -245,10 +267,6 @@ namespace VideoHooks
             // process the batch
             if (primType == XD3DPT_QUADLIST && stride == 24 && g_isShaderLoaded)
             {
-                // Have to force this at the moment until I figure out why its setting the viewport to 0
-                D3DVIEWPORT9 viewport{0, 0, 1280, 720, 0.0, 1.0};
-                g_video->m_d3dDevice->GetViewport(&viewport);
-
                 // Log::Info("BeginVerticesBatch", "The viewport is set to: Width: ", viewport.Width, ", Height: ", viewport.Height, ", X: ", viewport.X, ", Y: ", viewport.Y);
 
                 g_video->m_d3dDevice->SetVertexShader(g_pVertexShader);
@@ -297,9 +315,6 @@ namespace VideoHooks
                     g_video->m_d3dDevice->SetSamplerState(i, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
                 }
 
-                g_video->m_d3dDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-                g_video->m_d3dDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
                 // print all of the quad list vertices
                 QuadListVertex *quadVertices = (QuadListVertex *)memory;
 
@@ -339,7 +354,7 @@ namespace VideoHooks
         }
     }
 
-    void ShowPixelBuffer(void *pPixelBuffer)
+    void D3DDevice_Swap()
     {
         EnsureSceneActive();
 
@@ -366,7 +381,8 @@ namespace VideoHooks
         int frameNumber,
         void *videoRenderable)
     {
-        // Log::Info("VideoDecoder_Vp6_Decode", "Processing frame -> ", frameNumber);
+
+        Log::Info("VideoDecoder_Vp6_Decode", "Processing frame -> ", frameNumber);
 
         __imp__sub_829CF1F0(*PPCLocal::g_ppcContext, Memory::g_base);
 
@@ -409,6 +425,11 @@ namespace VideoHooks
 
     void D3DDevice_SetTexture(void *pDevice, unsigned int Sampler, void *pTexture)
     {
+        // Log::Info("D3DDevice_SetTexture", "Setting sampler -> ", Sampler, ", Texture -> ", pTexture);
+
+        if (Sampler == 2)
+        {
+        }
     }
 
     HRESULT D3DDevice_BeginIndexedVertices(
@@ -470,6 +491,7 @@ namespace VideoHooks
         if (destPtr == 0 || sourcePtr == 0)
         {
             Log::Error("RwMemCopy", "INVALID MEM COPY: ", destPtr, ", ", sourcePtr);
+
             return;
         }
 
@@ -577,7 +599,7 @@ GUEST_FUNCTION_HOOK(sub_83143130, VideoHooks::D3DDevice_SetSamplerState_MaxMipLe
 GUEST_FUNCTION_HOOK(sub_83143268, VideoHooks::D3DDevice_SetSamplerState_MinMipLevel)
 
 GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
-GUEST_FUNCTION_HOOK(sub_8232CFD0, VideoHooks::ShowPixelBuffer)
+GUEST_FUNCTION_HOOK(sub_823A7C98, VideoHooks::D3DDevice_Swap)
 GUEST_FUNCTION_HOOK(sub_82381BD0, VideoHooks::D3DDevice_Clear)
 GUEST_FUNCTION_HOOK(sub_82381AA8, VideoHooks::D3DDevice_ClearF)
 
@@ -588,24 +610,26 @@ GUEST_FUNCTION_HOOK(sub_82364240, VideoHooks::D3DDevice_DrawIndexedVertices)
 
 GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::D3D_LockResource)
 GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::D3D_UnlockResource)
-GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)
 GUEST_FUNCTION_HOOK(sub_8235FCE0, VideoHooks::D3D_SetViewport)
-GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::VideoDecoder_Vp6_Decode)
-GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::AsyncOp_Open)
 GUEST_FUNCTION_HOOK(sub_82364E98, VideoHooks::D3DDevice_SetVertexShader)
 GUEST_FUNCTION_HOOK(sub_825E5538, VideoHooks::Sk8_AddParam)
+
+// hacks
+GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)
 GUEST_FUNCTION_HOOK(sub_8257AA38, VideoHooks::VideoRenderer_RwTexture_Render)
+GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::AsyncOp_Open)
+GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::VideoDecoder_Vp6_Decode)
 
 GUEST_FUNCTION_STUB(sub_8233F578) // D3DDevice_SetShaderGPRAllocation
 GUEST_FUNCTION_STUB(sub_8235FBE8) // D3DDevice_SetScissorRect
-GUEST_FUNCTION_STUB(sub_823661D0) // renderengine::PixelBuffer::Xbox2ResolveTo
-GUEST_FUNCTION_STUB(sub_823650A0) // renderengine::postfx::PfxHelper::RenderQuad
-GUEST_FUNCTION_STUB(sub_8235B0F8) // renderengine::postfx::PfxHelper::RenderQuad_Transform
-GUEST_FUNCTION_STUB(sub_8235F8F8) // D3D::SetSurfaceClip
-GUEST_FUNCTION_STUB(sub_82363EC0) // D3D::SetPending_RenderStates
-GUEST_FUNCTION_STUB(sub_82358B40) // renderengine::postfx::RenderTarget::Resolve
+GUEST_FUNCTION_STUB(sub_823622E8) // D3DDevice_Resolve
+GUEST_FUNCTION_STUB(sub_823A5878) // D3DDevice_SetPredication
 GUEST_FUNCTION_STUB(sub_82360650) // D3DDevice_SetSurfaces
-GUEST_FUNCTION_STUB(sub_82364740) // D3D::SetPending_AluConstants
-GUEST_FUNCTION_STUB(sub_823630F0) // D3D::SetLiteralShaderConstants
 GUEST_FUNCTION_STUB(sub_8239C960) // D3DDevice_BeginTiling
 GUEST_FUNCTION_STUB(sub_823A5398) // D3DDevice_EndTiling
+GUEST_FUNCTION_STUB(sub_8232D3D8) // D3D::SynchronizeToPresentationInterval
+
+GUEST_FUNCTION_STUB(sub_8235F8F8) // D3D::SetSurfaceClip
+GUEST_FUNCTION_STUB(sub_82363EC0) // D3D::SetPending_RenderStates
+GUEST_FUNCTION_STUB(sub_82364740) // D3D::SetPending_AluConstants
+GUEST_FUNCTION_STUB(sub_823630F0) // D3D::SetLiteralShaderConstants

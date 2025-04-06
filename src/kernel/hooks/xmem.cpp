@@ -89,8 +89,6 @@ namespace Hooks
     // If we don't implement this, the EA allocator tries to allocate 4gb of heap space
     void Import_MmQueryStatistics(_MM_STATISTICS *statistics)
     {
-        Log::Info("MmQueryStatistics", "Called.");
-
         // Ensure the statistics pointer is valid
         if (!statistics)
         {
@@ -145,7 +143,7 @@ namespace Hooks
 
     void Import_MmQueryAddressProtect()
     {
-        Log::Stub("MmQueryAddressProtect", "Called.");
+        // Log::Stub("MmQueryAddressProtect", "Called.");
     }
 
     void Import_MmGetPhysicalAddress()
@@ -155,7 +153,7 @@ namespace Hooks
 
     void Import_MmSetAddressProtect()
     {
-        Log::Stub("MmSetAddressProtect", "Called.");
+        // Log::Stub("MmSetAddressProtect", "Called.");
     }
 
     void Import_NtProtectVirtualMemory()

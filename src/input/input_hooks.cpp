@@ -111,7 +111,7 @@ namespace InputHooks
 
     void Import_XamInputSetState()
     {
-        Log::Stub("XamInputSetState", "Called.");
+        // Log::Stub("XamInputSetState", "Called.");
     }
 }
 

@@ -288,9 +288,9 @@ namespace Hooks
         Log::Stub("NtOpenFile", "Called.");
     }
 
-    void Import_NtCreateFile()
+    void Import_NtCreateFile(char *fileName)
     {
-        Log::Stub("NtOpenFile", "Called.");
+        Log::Stub("NtCreateFile", "Called -> ", fileName);
     }
 
     void Import_NtWriteFile()
@@ -303,9 +303,11 @@ namespace Hooks
         Log::Stub("NtSetInformationFile", "Called.");
     }
 
-    void Import_NtQueryInformationFile()
+    // Looks like its only used for XGetFilePhysicalSortKey
+    // returning 1 just means we disregard the sort key
+    uint32_t Import_NtQueryInformationFile()
     {
-        Log::Stub("NtQueryInformationFile", "Called.");
+        return 1;
     }
 
     void Import_NtQueryVolumeInformationFile()
