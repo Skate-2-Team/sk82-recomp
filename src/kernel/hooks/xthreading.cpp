@@ -173,6 +173,7 @@ namespace Hooks
 
     bool Import_KeSetEvent(XKEVENT *pEvent, uint32_t Increment, bool Wait)
     {
+
         bool result = QueryKernelObject<Event>(*pEvent)->Set();
 
         ++g_keSetEventGeneration;
@@ -213,6 +214,31 @@ namespace Hooks
     void Import_ExTerminateThread()
     {
         ExitThread(0);
+    }
+
+    // Game uses this to see if the video decoder thread is still alive, otherwise it wont
+    // start the next movie
+    int Hooks_GetExitCodeThread(uint32_t hThread, unsigned int *lpExitCode)
+    {
+        // thread address comes out of heap struct
+        hThread = ByteSwap(hThread);
+
+        auto threadContext = Memory::Translate<GuestThreadHandle *>(hThread);
+
+        HANDLE curHandle;
+
+        if (threadContext == GetKernelObject(CURRENT_THREAD_HANDLE))
+            curHandle = GetCurrentThread();
+        else
+            curHandle = threadContext->thread.native_handle();
+
+        DWORD localExit;
+
+        BOOL result = GetExitCodeThread(curHandle, &localExit);
+
+        *lpExitCode = ByteSwap(localExit);
+
+        return result;
     }
 
     uint32_t Import_NtCreateEvent(be<uint32_t> *handle, void *objAttributes, uint32_t eventType, uint32_t initialState)
@@ -541,6 +567,7 @@ namespace Hooks
 
 // RaiseException
 GUEST_FUNCTION_HOOK(sub_82C78920, Hooks::Hooks_RaiseException)
+GUEST_FUNCTION_HOOK(sub_82C74278, Hooks::Hooks_GetExitCodeThread)
 
 GUEST_FUNCTION_HOOK(__imp__NtDuplicateObject, Hooks::Import_NtDuplicateObject)
 GUEST_FUNCTION_HOOK(__imp__NtCancelTimer, Hooks::Import_NtCancelTimer)

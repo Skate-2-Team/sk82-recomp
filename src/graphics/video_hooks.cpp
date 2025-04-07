@@ -11,30 +11,6 @@ PPC_FUNC(MainLoopHook)
 
 namespace VideoHooks
 {
-    void EnsureSceneActive()
-    {
-        if (!g_sceneActive && g_video->m_d3dDevice)
-        {
-            HRESULT hr = g_video->m_d3dDevice->BeginScene();
-            if (SUCCEEDED(hr))
-            {
-                g_sceneActive = true;
-            }
-        }
-    }
-
-    void EndSceneIfActive()
-    {
-        if (g_sceneActive && g_video->m_d3dDevice)
-        {
-            HRESULT hr = g_video->m_d3dDevice->EndScene();
-            if (SUCCEEDED(hr))
-            {
-                g_sceneActive = false;
-            }
-        }
-    }
-
     HRESULT CompileShaderFromFile(LPCWSTR szFileName, LPCSTR szEntryPoint, LPCSTR szShaderModel, ID3DBlob **ppBlobOut)
     {
         DWORD dwShaderFlags = 0;
@@ -356,7 +332,7 @@ namespace VideoHooks
 
     void D3DDevice_Swap()
     {
-        EnsureSceneActive();
+        g_video->m_d3dDevice->BeginScene();
 
         while (!batchQueue.empty())
         {
@@ -368,7 +344,7 @@ namespace VideoHooks
             delete currentBatch;
         }
 
-        EndSceneIfActive();
+        g_video->m_d3dDevice->EndScene();
 
         g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
     }

@@ -304,38 +304,20 @@ namespace Hooks
         std::condition_variable cv;
         bool signaled;
         bool active;
-        bool autoReset;
         uint32_t period;
         std::chrono::steady_clock::time_point dueTime;
-        std::thread timerThread;
 
-        Timer(bool autoReset)
-            : signaled(false), active(false), autoReset(autoReset), period(0)
-        {
-        }
-
-        ~Timer()
-        {
-            CancelTimer();
-
-            if (timerThread.joinable())
-            {
-                timerThread.join();
-            }
-        }
+        Timer(bool autoReset) : signaled(false), active(false), period(0) {}
 
         uint32_t Wait(uint32_t timeout) override
         {
             std::unique_lock<std::mutex> lock(mtx);
-
             if (timeout == 0)
             {
                 if (!signaled)
                     return STATUS_TIMEOUT;
 
-                if (autoReset)
-                    signaled = false;
-
+                signaled = false;
                 return STATUS_SUCCESS;
             }
             else if (timeout == INFINITE)
@@ -343,108 +325,74 @@ namespace Hooks
                 cv.wait(lock, [this]()
                         { return signaled; });
 
-                if (autoReset)
-                    signaled = false;
-
+                signaled = false;
                 return STATUS_SUCCESS;
             }
             else
             {
-                // Wait with timeout
-                auto waitResult = cv.wait_for(lock,
-                                              std::chrono::milliseconds(timeout),
-                                              [this]()
-                                              { return signaled; });
-
-                if (!waitResult)
-                    return STATUS_TIMEOUT;
-
-                if (autoReset)
-                    signaled = false;
-
-                return STATUS_SUCCESS;
+                assert(false && "Unsupported timeout value");
+                return STATUS_TIMEOUT;
             }
         }
 
         void SetTimer(uint32_t dueTimeMs, uint32_t periodMs)
         {
-            CancelTimer();
-
             {
                 std::lock_guard<std::mutex> lock(mtx);
                 active = true;
                 period = periodMs;
-
                 if (dueTimeMs == 0)
                 {
                     signaled = true;
                     cv.notify_all();
-
-                    if (periodMs == 0)
-                        return;
-
-                    dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(periodMs);
                 }
                 else
                 {
+                    signaled = false;
                     dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(dueTimeMs);
                 }
             }
 
-            timerThread = std::thread([this, dueTimeMs, periodMs]()
-                                      {
-                while (true)
-                {
-                    std::unique_lock<std::mutex> lock(mtx);
-                    
-                    if (!active)
-                        break;
-                    
-                    auto status = cv.wait_until(lock, dueTime, [this]() { return !active; });
-                    
-                    if (!active)
-                        break;
-                        
-                    if (!status)
+            if (dueTimeMs > 0 || periodMs > 0)
+            {
+                std::thread([this, dueTimeMs, periodMs]
+                            {
+                    while (true)
                     {
+                        std::unique_lock<std::mutex> lock(mtx);
+
+                        if (!active)
+                            break;
+
+                        if (dueTimeMs > 0)
+                        {
+                            cv.wait_until(lock, dueTime);
+                            if (!active)
+                                break;
+                        }
+
                         signaled = true;
                         cv.notify_all();
-                        
-                        // If one-shot timer, we're done
-                        if (period == 0)
+
+                        if (periodMs == 0)
                         {
                             active = false;
                             break;
                         }
-                        
-                        dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(period);
-                        
-                        if (autoReset)
-                        {
-                            lock.unlock();
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                            lock.lock();
-                            signaled = false;
-                        }
-                    }
-                } });
+
+                        dueTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(periodMs);
+                        signaled = false;
+                    } })
+                    .detach();
+            }
         }
 
         void CancelTimer()
         {
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                if (!active)
-                    return;
-
-                active = false;
-                cv.notify_all();
-            }
-
-            if (timerThread.joinable())
-            {
-                timerThread.join();
-            }
+            std::lock_guard<std::mutex> lock(mtx);
+            active = false;
+            signaled = false;
+            cv.notify_all();
         }
 
         bool IsSignaled()
