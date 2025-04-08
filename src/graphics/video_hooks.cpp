@@ -33,11 +33,42 @@ namespace VideoHooks
         }
         else
         {
+
             Log::Info("ShaderComp", "Shader compiled successfully.");
+
+            // get the file name without extension
+            std::string fileName = std::filesystem::path(szFileName).filename().string();
+            fileName = fileName.substr(0, fileName.find_last_of('.'));
+
+            // merge filename with entry point to create a unique name for the shader
+            std::string shaderName = "shaders//" + fileName + "_" + szEntryPoint;
+
+            // .vpo if its a vertex shader, .fpo if its a pixel shader
+            if (strcmp(szShaderModel, "vs_3_0") == 0)
+            {
+                shaderName += ".vpo";
+            }
+            else if (strcmp(szShaderModel, "ps_3_0") == 0)
+            {
+                shaderName += ".fpo";
+            }
+
+            std::ofstream shaderFile(shaderName, std::ios::binary);
+            if (shaderFile.is_open())
+            {
+                shaderFile.write((const char *)(*ppBlobOut)->GetBufferPointer(), (*ppBlobOut)->GetBufferSize());
+                shaderFile.close();
+                Log::Info("ShaderComp", "Shader saved to shader.bin.");
+            }
+            else
+            {
+                std::cerr << "Failed to open shader file for writing." << std::endl;
+            }
         }
 
         if (pErrorBlob)
             pErrorBlob->Release();
+
         return S_OK;
     }
 
@@ -97,11 +128,6 @@ namespace VideoHooks
 
         InitShaders();
 
-        // create three dummy textures
-        g_video->m_d3dDevice->CreateTexture(1280, 720, 0, D3DUSAGE_DYNAMIC, D3DFMT_L8, D3DPOOL_DEFAULT, &lumTex, nullptr);
-        g_video->m_d3dDevice->CreateTexture(640, 360, 0, D3DUSAGE_DYNAMIC, D3DFMT_L8, D3DPOOL_DEFAULT, &blueTex, nullptr);
-        g_video->m_d3dDevice->CreateTexture(640, 360, 0, D3DUSAGE_DYNAMIC, D3DFMT_L8, D3DPOOL_DEFAULT, &redTex, nullptr);
-
         g_isShaderLoaded = true;
 
         // to stop crashing
@@ -128,107 +154,7 @@ namespace VideoHooks
         __imp__sub_825E5538(*PPCLocal::g_ppcContext, Memory::g_base);
     }
 
-    HRESULT FillTextureDataRaw(IDirect3DTexture9 *pTexture, UINT srcWidth, UINT srcHeight, const uint8_t *srcData)
-    {
-        if (!pTexture || !srcData)
-            return E_INVALIDARG;
-
-        D3DLOCKED_RECT lockedRect;
-        HRESULT hr = pTexture->LockRect(0, &lockedRect, nullptr, 0);
-        if (FAILED(hr))
-        {
-            std::cerr << "Failed to lock texture." << std::endl;
-            return hr;
-        }
-
-        // If the pitch (bytes per row in the texture) matches srcWidth,
-        // we can copy the whole block at once.
-        if (lockedRect.Pitch == srcWidth)
-        {
-            memcpy(lockedRect.pBits, srcData, srcWidth * srcHeight);
-        }
-        else
-        {
-            // Otherwise, copy each row individually.
-            for (UINT row = 0; row < srcHeight; row++)
-            {
-                memcpy(reinterpret_cast<uint8_t *>(lockedRect.pBits) + row * lockedRect.Pitch, srcData + row * srcWidth, srcWidth);
-            }
-        }
-
-        pTexture->UnlockRect(0);
-        return S_OK;
-    }
-
-    void DumpYUVFrame(const char *filename, uint8_t *yPlane, uint8_t *uPlane, uint8_t *vPlane, int width, int height)
-    {
-        FILE *f = fopen(filename, "wb");
-        if (!f)
-        {
-            std::cerr << "Failed to open YUV output file!" << std::endl;
-            return;
-        }
-
-        size_t ySize = width * height;
-        size_t uvSize = (width / 2) * (height / 2);
-
-        fwrite(yPlane, 1, ySize, f);
-        fwrite(uPlane, 1, uvSize, f);
-        fwrite(vPlane, 1, uvSize, f);
-
-        fclose(f);
-    }
-
-    PPC_FUNC_IMPL(__imp__sub_8257AA38);
-    void VideoRenderer_RwTexture_Render(void *thisPtr, VideoRenderable *videoRenderable, int vp6Border)
-    {
-
-        // Log::Info("VideoRenderer_RwTexture_Render", "Rendering frame -> ", videoRenderable->mFrameNumber);
-
-        // convert data vars
-        uint8_t *data0 = (uint8_t *)Memory::Translate<uint8_t *>(ByteSwap(videoRenderable->mData[0]));
-        uint8_t *data1 = (uint8_t *)Memory::Translate<uint8_t *>(ByteSwap(videoRenderable->mData[1]));
-        uint8_t *data2 = (uint8_t *)Memory::Translate<uint8_t *>(ByteSwap(videoRenderable->mData[2]));
-
-        // print addresses
-
-        // Log::Info("VideoRenderer_RwTexture_Render", "Data0: ", (void *)data0, ", Data1: ", (void *)data1, ", Data2: ", (void *)data2);
-
-        int chromaIndex = (((videoRenderable->mWidth + 2) * vp6Border) >> 2);
-
-        uint8_t *lumBuffer = &data0[(videoRenderable->mWidth + 1) * vp6Border];
-        uint8_t *uChroma = &data1[chromaIndex];
-        uint8_t *vChroma = &data2[chromaIndex];
-
-        // print num buffers used
-
-        HRESULT hrY = FillTextureDataRaw(lumTex, videoRenderable->mWidth, videoRenderable->mHeight, lumBuffer);
-        if (FAILED(hrY))
-        {
-            std::cerr << "Failed to fill luminance texture." << std::endl;
-            return;
-        }
-
-        // For U and V, use half resolution (assuming 4:2:0 chroma sampling).
-        UINT chromaWidth = videoRenderable->mWidth >> 1;   // e.g. 1280/2 = 640
-        UINT chromaHeight = videoRenderable->mHeight >> 1; // e.g. 720/2 = 360
-
-        HRESULT hrU = FillTextureDataRaw(blueTex, chromaWidth, chromaHeight, uChroma);
-        if (FAILED(hrU))
-        {
-            std::cerr << "Failed to fill U texture." << std::endl;
-            return;
-        }
-
-        HRESULT hrV = FillTextureDataRaw(redTex, chromaWidth, chromaHeight, vChroma);
-        if (FAILED(hrV))
-        {
-            std::cerr << "Failed to fill V texture." << std::endl;
-            return;
-        }
-
-        __imp__sub_8257AA38(*PPCLocal::g_ppcContext, Memory::g_base);
-    }
+    static bool texReady = false;
 
     // all test code at the moment
     namespace Batches
@@ -246,7 +172,7 @@ namespace VideoHooks
                 // Log::Info("BeginVerticesBatch", "The viewport is set to: Width: ", viewport.Width, ", Height: ", viewport.Height, ", X: ", viewport.X, ", Y: ", viewport.Y);
 
                 g_video->m_d3dDevice->SetVertexShader(g_pVertexShader);
-                g_video->m_d3dDevice->SetPixelShader(g_pPixelShader);
+                // g_video->m_d3dDevice->SetPixelShader(g_pPixelShader);
 
                 // copy current g_matVP into normal matrix
                 Matrix4x4 matVp = {0};
@@ -273,10 +199,25 @@ namespace VideoHooks
                 g_video->m_d3dDevice->SetVertexShaderConstantF(0, (float *)&matVp, 4);
                 g_video->m_d3dDevice->SetVertexShaderConstantF(4, (float *)&matWorld, 4);
 
+                g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED |
+                                                                                 D3DCOLORWRITEENABLE_GREEN |
+                                                                                 D3DCOLORWRITEENABLE_BLUE);
+
                 // Set the texture stage states
-                g_video->m_d3dDevice->SetTexture(0, lumTex);
-                g_video->m_d3dDevice->SetTexture(1, blueTex);
-                g_video->m_d3dDevice->SetTexture(2, redTex);
+                if (texReady)
+                {
+                    auto it = g_textureMap.begin();
+
+                    g_video->m_d3dDevice->SetTexture(2, it->second->texture);
+                    it++;
+
+                    g_video->m_d3dDevice->SetTexture(1, it->second->texture);
+                    it++;
+
+                    g_video->m_d3dDevice->SetTexture(0, it->second->texture);
+
+                    g_textureMap.end();
+                }
 
                 struct QuadListVertex
                 {
@@ -383,6 +324,23 @@ namespace VideoHooks
         return Memory::MapVirtual(batchInfo->memory);
     }
 
+    static bool hasPrinted = false;
+
+    PPC_FUNC_IMPL(__imp__sub_82BCEEA8);
+    void cFxParser_StartElement(
+        void *thisPtr,
+        char *name)
+    {
+        if (!hasPrinted)
+        {
+            // Log::Info("cFxParser_StartElement", "Name -> ", name);
+
+            hasPrinted = true;
+        }
+
+        __imp__sub_82BCEEA8(*PPCLocal::g_ppcContext, Memory::g_base);
+    }
+
     void D3DDevice_DrawVertices(void *pDevice, XBOXPRIMITIVETYPE PrimitiveType, unsigned __int64 VertexCount, void *vertexData)
     {
     }
@@ -474,6 +432,241 @@ namespace VideoHooks
         __imp__sub_8236C5F8(*PPCLocal::g_ppcContext, Memory::g_base);
     }
 
+    PPC_FUNC_IMPL(__imp__sub_829FF6D0);
+    uint32_t Texture_Initialize(uint32_t resource, const TextureParameters *params)
+    {
+        __imp__sub_829FF6D0(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        // currently only store if the type is PIXELFORMAT_LIN_L8
+
+        if (params->format == PIXELFORMAT_LIN_L8)
+        {
+            // make a d3d texture from the resource
+            IDirect3DTexture9 *pTexture = nullptr;
+            HRESULT hr = g_video->m_d3dDevice->CreateTexture(params->width, params->height, params->mipLevels, D3DUSAGE_DYNAMIC, D3DFMT_L8, D3DPOOL_DEFAULT, &pTexture, nullptr);
+
+            if (FAILED(hr))
+            {
+                std::cerr << "Failed to create texture." << std::endl;
+            }
+
+            auto guestTex = new GuestTexture;
+
+            guestTex->texture = pTexture;
+
+            g_textureMap[PPCLocal::g_ppcContext->r3.u32] = guestTex;
+
+            Log::Info("Texture_Initialize", "Hash map size: ", g_textureMap.size());
+
+            if (g_textureMap.size() == 3)
+            {
+                texReady = true;
+            }
+        }
+
+        return PPCLocal::g_ppcContext->r3.u32;
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_823BF740);
+    void D3D_LockSurface(uint32_t pTexture) // arguments arent reliable on guest hook here
+    {
+        uint64_t AsyncBlock = PPCLocal::g_ppcContext->r6.u64;
+        uint32_t *Level = Memory::Translate<uint32_t *>(PPCLocal::g_ppcContext->r8.u32);
+        uint32_t *Flags = Memory::Translate<uint32_t *>(PPCLocal::g_ppcContext->r9.u32);
+
+        // check if the texture is in the map
+        auto it = g_textureMap.find(pTexture);
+        if (it == g_textureMap.end())
+        {
+            __imp__sub_823BF740(*PPCLocal::g_ppcContext, Memory::g_base);
+
+            return;
+        }
+
+        GuestTexture *guestTex = it->second;
+
+        // Assume mipLevel in AsyncBlock's low 32-bits
+        UINT mipLevel = (UINT)(AsyncBlock & 0xFFFFFFFF);
+
+        D3DSURFACE_DESC desc;
+        guestTex->texture->GetLevelDesc(mipLevel, &desc);
+
+        UINT pitch = desc.Width; // assuming L8 format
+        UINT height = desc.Height;
+        UINT size = pitch * desc.Height;
+
+        guestTex->pitch = pitch;
+        guestTex->height = height;
+
+        if (guestTex->texBuffer)
+        {
+            g_heap->Free(guestTex->texBuffer);
+        }
+
+        guestTex->texBuffer = g_heap->AllocPhysical(size, 128);
+
+        *Level = ByteSwap(Memory::MapVirtual(guestTex->texBuffer));
+        *Flags = ByteSwap(pitch);
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_82325F50);
+    void D3D_UnlockResource(uint32_t pResource)
+    {
+        // Log::Info("D3D_UnlockResource", "Unlocking resource: ", pResource);
+
+        auto it = g_textureMap.find(pResource);
+        if (it == g_textureMap.end())
+        {
+            __imp__sub_82325F50(*PPCLocal::g_ppcContext, Memory::g_base);
+            return;
+        }
+
+        GuestTexture *guestTex = it->second;
+
+        // unlock it and write the data to the texture
+        D3DLOCKED_RECT lockedRect;
+        HRESULT hr = guestTex->texture->LockRect(0, &lockedRect, nullptr, 0);
+
+        if (FAILED(hr))
+        {
+            std::cerr << "Failed to lock texture." << std::endl;
+            return;
+        }
+
+        for (UINT row = 0; row < guestTex->height; row++)
+        {
+            memcpy(reinterpret_cast<uint8_t *>(lockedRect.pBits) + row * lockedRect.Pitch, reinterpret_cast<uint8_t *>(guestTex->texBuffer) + row * guestTex->pitch, guestTex->pitch);
+        }
+
+        // Unlock the texture
+        guestTex->texture->UnlockRect(0);
+
+        g_heap->Free(guestTex->texBuffer);
+        guestTex->texBuffer = nullptr;
+        guestTex->pitch = 0;
+        guestTex->height = 0;
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_827A2D78);
+    int FileLoader_SyncLoad(
+        void *thisPtr,
+        char *filename)
+    {
+        // Log::Info("FileLoader_SyncLoad", "Loading file: ", filename);
+
+        __imp__sub_827A2D78(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        if (std::string(filename).contains("vp6_"))
+        {
+        }
+
+        return PPCLocal::g_ppcContext->r3.u32;
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_829FE9A0);
+    renderengine::ProgramBuffer *ProgramBuffer_Initialize(void *resource, const renderengine::ProgBuffer_Parameters *params)
+    {
+        // we can figure out what shader it is by looking at the updb file name entry in the bytecode
+        // and processing the filename
+        // shaders that are loaded via files, the params->size == 4, otherwise its embedded bytecode and will have an actual size.
+
+        __imp__sub_829FE9A0(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        // only support pixel shaders right now.
+        if (params->m_size == 4 && params->m_type == renderengine::Type::TYPE_PIXEL)
+        {
+            uint8_t *bytecode = Memory::Translate<uint8_t *>(params->m_buffer);
+
+            char *updbEntry = (char *)(bytecode + 0x2C);
+
+            std::string filePath(updbEntry);
+            std::filesystem::path path(filePath);
+
+            std::string fileName = path.filename().string();
+
+            // Log::Info("ProgramBuffer_Initialize", "Initializing program buffer: ", fileName, " | Size -> ", params->m_size);
+
+            // remove file extension and replace with .fpo
+            std::string newFileName = fileName.substr(0, fileName.find_last_of('.')) + ".fpo";
+            std::string newFilePath = "shaders//" + newFileName;
+
+            std::ifstream shaderFile(newFilePath, std::ios::binary);
+            if (shaderFile.is_open())
+            {
+                // alloc new prog buffer on guest heap
+                renderengine::ProgramBuffer *progBuffer = (renderengine::ProgramBuffer *)g_heap->AllocPhysical(sizeof(renderengine::ProgramBuffer), 128);
+                progBuffer->m_type = renderengine::Type::TYPE_PIXEL;
+
+                shaderFile.seekg(0, std::ios::end);
+                size_t fileSize = shaderFile.tellg();
+                shaderFile.seekg(0, std::ios::beg);
+
+                std::vector<uint8_t> shaderData(fileSize);
+                shaderFile.read(reinterpret_cast<char *>(shaderData.data()), fileSize);
+                shaderFile.close();
+
+                ID3DBlob *pVSBlob = nullptr;
+                HRESULT hr = g_video->m_d3dDevice->CreatePixelShader((const DWORD *)shaderData.data(), &progBuffer->m_pixelShader);
+
+                if (FAILED(hr))
+                {
+                    std::cerr << "Failed to create vertex shader." << std::endl;
+                    DebugBreak();
+                }
+
+                // identifer for SetPixelProgram
+                progBuffer->m_part = 69;
+
+                Log::Info("ProgramBuffer_Initialize", "Created pixel shader: ", fileName, " | Size -> ", fileSize);
+
+                return progBuffer;
+            }
+            else
+            {
+                std::cerr << "Failed to open shader file for reading: " << newFilePath << std::endl;
+            }
+        }
+
+        return (renderengine::ProgramBuffer *)PPCLocal::g_ppcContext->r3.u32;
+    }
+
+    void StateShadow_SetPixelProgram(renderengine::ProgramBuffer *pShader)
+    {
+        if (pShader->m_part == 69)
+        {
+            // get StateShadow
+            auto stateShadow = Memory::Translate<be<uint32_t> *>(0x82DF33F8);
+
+            if (pShader != Memory::Translate<renderengine::ProgramBuffer *>(stateShadow->get()))
+            {
+                if (pShader)
+                {
+                    g_video->m_d3dDevice->SetPixelShader(pShader->m_pixelShader);
+                }
+
+                stateShadow->set(Memory::MapVirtual(pShader));
+            }
+        }
+    }
+
+    int ProgramBuffer_GetVariableHandleByName(void *, void *, renderengine::ProgramVariableHandle *stateHandle)
+    {
+        // handle is stack allocated
+
+        stateHandle->m_dataType = 0;
+        stateHandle->m_programType = 0;
+        stateHandle->m_numConstants = 0;
+        stateHandle->m_index = 0;
+
+        return 0;
+    }
+
+    void Technique_SetParamsFromShader()
+    {
+        // no-op
+        return;
+    }
+
     // This is stop mem leaks just for now
     uint32_t D3D_LockResource(void *pResource,
                               unsigned __int64 AsyncBlock,
@@ -486,7 +679,6 @@ namespace VideoHooks
                               unsigned int Flags,
                               unsigned int CoherStatus)
     {
-
         if (lastSize < Size)
         {
             if (globalBuffer != nullptr)
@@ -499,10 +691,6 @@ namespace VideoHooks
         }
 
         return Memory::MapVirtual(globalBuffer);
-    }
-
-    void D3D_UnlockResource(void *pResource)
-    {
     }
 
     void D3D_SetViewport(
@@ -583,18 +771,26 @@ GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::D3DDevice_BeginVertices)
 GUEST_FUNCTION_HOOK(sub_82A61218, VideoHooks::D3DDevice_BeginIndexedVertices)
 GUEST_FUNCTION_HOOK(sub_82363AC8, VideoHooks::D3DDevice_DrawVertices)
 GUEST_FUNCTION_HOOK(sub_82364240, VideoHooks::D3DDevice_DrawIndexedVertices)
+GUEST_FUNCTION_HOOK(sub_82364E98, VideoHooks::D3DDevice_SetVertexShader)
 
 GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::D3D_LockResource)
 GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::D3D_UnlockResource)
 GUEST_FUNCTION_HOOK(sub_8235FCE0, VideoHooks::D3D_SetViewport)
-GUEST_FUNCTION_HOOK(sub_82364E98, VideoHooks::D3DDevice_SetVertexShader)
+
+GUEST_FUNCTION_HOOK(sub_829FF6D0, VideoHooks::Texture_Initialize)
+GUEST_FUNCTION_HOOK(sub_823BF740, VideoHooks::D3D_LockSurface)
 GUEST_FUNCTION_HOOK(sub_825E5538, VideoHooks::Sk8_AddParam)
+GUEST_FUNCTION_HOOK(sub_82BCEEA8, VideoHooks::cFxParser_StartElement)
 
 // hacks
 GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)
-GUEST_FUNCTION_HOOK(sub_8257AA38, VideoHooks::VideoRenderer_RwTexture_Render)
 GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::AsyncOp_Open)
 GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::VideoDecoder_Vp6_Decode)
+GUEST_FUNCTION_HOOK(sub_827A2D78, VideoHooks::FileLoader_SyncLoad)
+GUEST_FUNCTION_HOOK(sub_829FEB90, VideoHooks::ProgramBuffer_GetVariableHandleByName)
+GUEST_FUNCTION_HOOK(sub_829FE9A0, VideoHooks::ProgramBuffer_Initialize)
+GUEST_FUNCTION_HOOK(sub_82BCE6B0, VideoHooks::Technique_SetParamsFromShader)
+GUEST_FUNCTION_HOOK(sub_82365A88, VideoHooks::StateShadow_SetPixelProgram)
 
 GUEST_FUNCTION_STUB(sub_8233F578) // D3DDevice_SetShaderGPRAllocation
 GUEST_FUNCTION_STUB(sub_8235FBE8) // D3DDevice_SetScissorRect

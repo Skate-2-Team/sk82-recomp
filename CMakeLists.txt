@@ -17,7 +17,6 @@ set_property(TARGET o1heap PROPERTY LINKER_LANGUAGE C)
 target_compile_options(o1heap PRIVATE -m64)
 set_property(TARGET o1heap PROPERTY C_STANDARD 99)
 
-# COMPILE SDL
 add_subdirectory(${EXTERNAL_ROOT})
 
 add_executable(${TARGET_NAME} 
@@ -73,6 +72,7 @@ target_link_libraries(${TARGET_NAME}
     d3d9 
     o1heap
     d3dcompiler
+    xxHash::xxhash
 )
 
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 23)
