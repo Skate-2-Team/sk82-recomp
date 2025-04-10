@@ -79,7 +79,7 @@ namespace Hooks
 
     void Import_XamShowDeviceSelectorUI()
     {
-        Log::Stub("XamShowDeviceSelectorUI", "Called.");
+        Log::Info("XamShowDeviceSelectorUI", "HAS BEEN CALLED!");
     }
 
     void Import_XamShowDirtyDiscErrorUI()

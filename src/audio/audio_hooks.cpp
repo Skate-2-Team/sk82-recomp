@@ -19,7 +19,7 @@ namespace AudioHooks
     {
         GuestThreadContext ctx(0);
 
-        while (1)
+        while (true)
         {
             // just keep calling the callback
             ctx.ppcContext.r3.u32 = g_clientCallbackParam;
@@ -39,6 +39,10 @@ namespace AudioHooks
         *pClientParam = param;
         g_clientCallbackParam = Memory::MapVirtual(pClientParam);
         g_clientCallback = callback;
+
+        // set thread name
+        std::wstring threadName = L"XAudioClientThread";
+        SetThreadDescription(GetCurrentThread(), threadName.c_str());
 
         g_audioThread = std::make_unique<std::thread>(AudioThread);
     }

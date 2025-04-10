@@ -11,102 +11,6 @@ PPC_FUNC(MainLoopHook)
 
 namespace VideoHooks
 {
-    HRESULT CompileShaderFromFile(LPCWSTR szFileName, LPCSTR szEntryPoint, LPCSTR szShaderModel, ID3DBlob **ppBlobOut)
-    {
-        DWORD dwShaderFlags = 0;
-#if defined(DEBUG) || defined(_DEBUG)
-        // Enable debugging and skip optimization for easier shader debugging.
-        dwShaderFlags |= D3DCOMPILE_DEBUG;
-#endif
-
-        ID3DBlob *pErrorBlob = nullptr;
-        HRESULT hr = D3DCompileFromFile(szFileName, nullptr, nullptr, szEntryPoint, szShaderModel, dwShaderFlags, 0, ppBlobOut, &pErrorBlob);
-        if (FAILED(hr))
-        {
-            if (pErrorBlob)
-            {
-                std::cerr << "Error compiling shader (" << szEntryPoint << "): "
-                          << (char *)pErrorBlob->GetBufferPointer() << std::endl;
-                pErrorBlob->Release();
-            }
-            return hr;
-        }
-        else
-        {
-
-            Log::Info("ShaderComp", "Shader compiled successfully.");
-
-            // get the file name without extension
-            std::string fileName = std::filesystem::path(szFileName).filename().string();
-            fileName = fileName.substr(0, fileName.find_last_of('.'));
-
-            // merge filename with entry point to create a unique name for the shader
-            std::string shaderName = "shaders//" + fileName + "_" + szEntryPoint;
-
-            // .vpo if its a vertex shader, .fpo if its a pixel shader
-            if (strcmp(szShaderModel, "vs_3_0") == 0)
-            {
-                shaderName += ".vpo";
-            }
-            else if (strcmp(szShaderModel, "ps_3_0") == 0)
-            {
-                shaderName += ".fpo";
-            }
-
-            std::ofstream shaderFile(shaderName, std::ios::binary);
-            if (shaderFile.is_open())
-            {
-                shaderFile.write((const char *)(*ppBlobOut)->GetBufferPointer(), (*ppBlobOut)->GetBufferSize());
-                shaderFile.close();
-                Log::Info("ShaderComp", "Shader saved to shader.bin.");
-            }
-            else
-            {
-                std::cerr << "Failed to open shader file for writing." << std::endl;
-            }
-        }
-
-        if (pErrorBlob)
-            pErrorBlob->Release();
-
-        return S_OK;
-    }
-
-    HRESULT InitShaders()
-    {
-        HRESULT hr;
-        ID3DBlob *pVSBlob = nullptr;
-        hr = CompileShaderFromFile(L"shaders//vp6.fx", "defaultVS", "vs_3_0", &pVSBlob);
-        if (FAILED(hr))
-        {
-            std::cerr << "Failed to compile vertex shader." << std::endl;
-            return hr;
-        }
-        hr = g_video->m_d3dDevice->CreateVertexShader((const DWORD *)pVSBlob->GetBufferPointer(), &g_pVertexShader);
-        pVSBlob->Release();
-        if (FAILED(hr))
-        {
-            std::cerr << "Failed to create vertex shader." << std::endl;
-            return hr;
-        }
-
-        ID3DBlob *pPSBlob = nullptr;
-        hr = CompileShaderFromFile(L"shaders//vp6.fx", "defaultPS", "ps_3_0", &pPSBlob);
-        if (FAILED(hr))
-        {
-            std::cerr << "Failed to compile pixel shader." << std::endl;
-            return hr;
-        }
-        hr = g_video->m_d3dDevice->CreatePixelShader((const DWORD *)pPSBlob->GetBufferPointer(), &g_pPixelShader);
-        pPSBlob->Release();
-        if (FAILED(hr))
-        {
-            std::cerr << "Failed to create pixel shader." << std::endl;
-            return hr;
-        }
-        return S_OK;
-    }
-
     HRESULT Direct3D_CreateDevice(
         unsigned int Adapter,
         int DeviceType,
@@ -126,9 +30,7 @@ namespace VideoHooks
             return E_FAIL;
         }
 
-        InitShaders();
-
-        g_isShaderLoaded = true;
+        Shaders::PrecompileShaders();
 
         // to stop crashing
         *ppReturnedDeviceInterface = (void *)Memory::MapVirtual(g_heap->AllocPhysical(22272, 128));
@@ -167,11 +69,11 @@ namespace VideoHooks
         void BeginVerticesBatch::Process()
         {
             // process the batch
-            if (primType == XD3DPT_QUADLIST && stride == 24 && g_isShaderLoaded)
+            if (primType == XD3DPT_QUADLIST && stride == 24 && Shaders::g_isShaderLoaded)
             {
                 // Log::Info("BeginVerticesBatch", "The viewport is set to: Width: ", viewport.Width, ", Height: ", viewport.Height, ", X: ", viewport.X, ", Y: ", viewport.Y);
 
-                g_video->m_d3dDevice->SetVertexShader(g_pVertexShader);
+                g_video->m_d3dDevice->SetVertexShader(Shaders::g_pVertexShader);
                 // g_video->m_d3dDevice->SetPixelShader(g_pPixelShader);
 
                 // copy current g_matVP into normal matrix
@@ -196,25 +98,35 @@ namespace VideoHooks
                 Matrix4x4 matWorld;
                 MatrixIdentity(&matWorld);
 
-                g_video->m_d3dDevice->SetVertexShaderConstantF(0, (float *)&matVp, 4);
-                g_video->m_d3dDevice->SetVertexShaderConstantF(4, (float *)&matWorld, 4);
+                // c4 - g_matVP
+                // c5 - i_matWorld
 
-                g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED |
-                                                                                 D3DCOLORWRITEENABLE_GREEN |
-                                                                                 D3DCOLORWRITEENABLE_BLUE);
+                g_video->m_d3dDevice->SetVertexShaderConstantF(4, (float *)&matVp, 4);
+                g_video->m_d3dDevice->SetVertexShaderConstantF(8, (float *)&matWorld, 4);
+
+                g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE, D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
 
                 // Set the texture stage states
                 if (texReady)
                 {
                     auto it = g_textureMap.begin();
 
-                    g_video->m_d3dDevice->SetTexture(2, it->second->texture);
+                    g_video->m_d3dDevice->SetTexture(0, it->second->texture);
                     it++;
+
+                    g_video->m_d3dDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                    g_video->m_d3dDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 
                     g_video->m_d3dDevice->SetTexture(1, it->second->texture);
                     it++;
 
-                    g_video->m_d3dDevice->SetTexture(0, it->second->texture);
+                    g_video->m_d3dDevice->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                    g_video->m_d3dDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+
+                    g_video->m_d3dDevice->SetTexture(2, it->second->texture);
+
+                    g_video->m_d3dDevice->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                    g_video->m_d3dDevice->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 
                     g_textureMap.end();
                 }
@@ -224,13 +136,6 @@ namespace VideoHooks
                     be<float> x, y, z, w;
                     be<float> u, v;
                 };
-
-                for (int i = 0; i < 3; i++)
-                {
-                    g_video->m_d3dDevice->SetSamplerState(i, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-                    g_video->m_d3dDevice->SetSamplerState(i, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-                    g_video->m_d3dDevice->SetSamplerState(i, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
-                }
 
                 // print all of the quad list vertices
                 QuadListVertex *quadVertices = (QuadListVertex *)memory;
@@ -349,10 +254,6 @@ namespace VideoHooks
     {
     }
 
-    void D3DDevice_SetVertexShader(void *pDevice, void *pShader)
-    {
-    }
-
     void D3DDevice_KickOff()
     {
     }
@@ -456,7 +357,7 @@ namespace VideoHooks
 
             g_textureMap[PPCLocal::g_ppcContext->r3.u32] = guestTex;
 
-            Log::Info("Texture_Initialize", "Hash map size: ", g_textureMap.size());
+            Log::Info("Texture_Initialize", "Make a texture -> ", params->width, ", ", params->height, ", ", params->mipLevels, ", ", params->format);
 
             if (g_textureMap.size() == 3)
             {
@@ -494,6 +395,8 @@ namespace VideoHooks
         UINT pitch = desc.Width; // assuming L8 format
         UINT height = desc.Height;
         UINT size = pitch * desc.Height;
+
+        /// stride
 
         guestTex->pitch = pitch;
         guestTex->height = height;
@@ -533,6 +436,8 @@ namespace VideoHooks
             return;
         }
 
+        // lock tex mutex
+
         for (UINT row = 0; row < guestTex->height; row++)
         {
             memcpy(reinterpret_cast<uint8_t *>(lockedRect.pBits) + row * lockedRect.Pitch, reinterpret_cast<uint8_t *>(guestTex->texBuffer) + row * guestTex->pitch, guestTex->pitch);
@@ -561,110 +466,6 @@ namespace VideoHooks
         }
 
         return PPCLocal::g_ppcContext->r3.u32;
-    }
-
-    PPC_FUNC_IMPL(__imp__sub_829FE9A0);
-    renderengine::ProgramBuffer *ProgramBuffer_Initialize(void *resource, const renderengine::ProgBuffer_Parameters *params)
-    {
-        // we can figure out what shader it is by looking at the updb file name entry in the bytecode
-        // and processing the filename
-        // shaders that are loaded via files, the params->size == 4, otherwise its embedded bytecode and will have an actual size.
-
-        __imp__sub_829FE9A0(*PPCLocal::g_ppcContext, Memory::g_base);
-
-        // only support pixel shaders right now.
-        if (params->m_size == 4 && params->m_type == renderengine::Type::TYPE_PIXEL)
-        {
-            uint8_t *bytecode = Memory::Translate<uint8_t *>(params->m_buffer);
-
-            char *updbEntry = (char *)(bytecode + 0x2C);
-
-            std::string filePath(updbEntry);
-            std::filesystem::path path(filePath);
-
-            std::string fileName = path.filename().string();
-
-            // Log::Info("ProgramBuffer_Initialize", "Initializing program buffer: ", fileName, " | Size -> ", params->m_size);
-
-            // remove file extension and replace with .fpo
-            std::string newFileName = fileName.substr(0, fileName.find_last_of('.')) + ".fpo";
-            std::string newFilePath = "shaders//" + newFileName;
-
-            std::ifstream shaderFile(newFilePath, std::ios::binary);
-            if (shaderFile.is_open())
-            {
-                // alloc new prog buffer on guest heap
-                renderengine::ProgramBuffer *progBuffer = (renderengine::ProgramBuffer *)g_heap->AllocPhysical(sizeof(renderengine::ProgramBuffer), 128);
-                progBuffer->m_type = renderengine::Type::TYPE_PIXEL;
-
-                shaderFile.seekg(0, std::ios::end);
-                size_t fileSize = shaderFile.tellg();
-                shaderFile.seekg(0, std::ios::beg);
-
-                std::vector<uint8_t> shaderData(fileSize);
-                shaderFile.read(reinterpret_cast<char *>(shaderData.data()), fileSize);
-                shaderFile.close();
-
-                ID3DBlob *pVSBlob = nullptr;
-                HRESULT hr = g_video->m_d3dDevice->CreatePixelShader((const DWORD *)shaderData.data(), &progBuffer->m_pixelShader);
-
-                if (FAILED(hr))
-                {
-                    std::cerr << "Failed to create vertex shader." << std::endl;
-                    DebugBreak();
-                }
-
-                // identifer for SetPixelProgram
-                progBuffer->m_part = 69;
-
-                Log::Info("ProgramBuffer_Initialize", "Created pixel shader: ", fileName, " | Size -> ", fileSize);
-
-                return progBuffer;
-            }
-            else
-            {
-                std::cerr << "Failed to open shader file for reading: " << newFilePath << std::endl;
-            }
-        }
-
-        return (renderengine::ProgramBuffer *)PPCLocal::g_ppcContext->r3.u32;
-    }
-
-    void StateShadow_SetPixelProgram(renderengine::ProgramBuffer *pShader)
-    {
-        if (pShader->m_part == 69)
-        {
-            // get StateShadow
-            auto stateShadow = Memory::Translate<be<uint32_t> *>(0x82DF33F8);
-
-            if (pShader != Memory::Translate<renderengine::ProgramBuffer *>(stateShadow->get()))
-            {
-                if (pShader)
-                {
-                    g_video->m_d3dDevice->SetPixelShader(pShader->m_pixelShader);
-                }
-
-                stateShadow->set(Memory::MapVirtual(pShader));
-            }
-        }
-    }
-
-    int ProgramBuffer_GetVariableHandleByName(void *, void *, renderengine::ProgramVariableHandle *stateHandle)
-    {
-        // handle is stack allocated
-
-        stateHandle->m_dataType = 0;
-        stateHandle->m_programType = 0;
-        stateHandle->m_numConstants = 0;
-        stateHandle->m_index = 0;
-
-        return 0;
-    }
-
-    void Technique_SetParamsFromShader()
-    {
-        // no-op
-        return;
     }
 
     // This is stop mem leaks just for now
@@ -751,6 +552,7 @@ namespace VideoHooks
 GUEST_FUNCTION_HOOK(sub_82352910, VideoHooks::D3DDevice_SetTexture)
 
 // samplers
+/*
 GUEST_FUNCTION_HOOK(sub_83142500, VideoHooks::D3DDevice_SetSamplerState_MinFilter)
 GUEST_FUNCTION_HOOK(sub_831426A8, VideoHooks::D3DDevice_SetSamplerState_MinFilter)
 GUEST_FUNCTION_HOOK(sub_831427F0, VideoHooks::D3DDevice_SetSamplerState_MagFilter)
@@ -760,7 +562,7 @@ GUEST_FUNCTION_HOOK(sub_83142D30, VideoHooks::D3DDevice_SetSamplerState_MaxAniso
 GUEST_FUNCTION_HOOK(sub_83142E60, VideoHooks::D3DDevice_SetSamplerState_AnisotropyBias)
 GUEST_FUNCTION_HOOK(sub_83142FC8, VideoHooks::D3DDevice_SetSamplerState_MipMapLodBias)
 GUEST_FUNCTION_HOOK(sub_83143130, VideoHooks::D3DDevice_SetSamplerState_MaxMipLevel)
-GUEST_FUNCTION_HOOK(sub_83143268, VideoHooks::D3DDevice_SetSamplerState_MinMipLevel)
+GUEST_FUNCTION_HOOK(sub_83143268, VideoHooks::D3DDevice_SetSamplerState_MinMipLevel)*/
 
 GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
 GUEST_FUNCTION_HOOK(sub_823A7C98, VideoHooks::D3DDevice_Swap)
@@ -771,7 +573,6 @@ GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::D3DDevice_BeginVertices)
 GUEST_FUNCTION_HOOK(sub_82A61218, VideoHooks::D3DDevice_BeginIndexedVertices)
 GUEST_FUNCTION_HOOK(sub_82363AC8, VideoHooks::D3DDevice_DrawVertices)
 GUEST_FUNCTION_HOOK(sub_82364240, VideoHooks::D3DDevice_DrawIndexedVertices)
-GUEST_FUNCTION_HOOK(sub_82364E98, VideoHooks::D3DDevice_SetVertexShader)
 
 GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::D3D_LockResource)
 GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::D3D_UnlockResource)
@@ -787,10 +588,6 @@ GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)
 GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::AsyncOp_Open)
 GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::VideoDecoder_Vp6_Decode)
 GUEST_FUNCTION_HOOK(sub_827A2D78, VideoHooks::FileLoader_SyncLoad)
-GUEST_FUNCTION_HOOK(sub_829FEB90, VideoHooks::ProgramBuffer_GetVariableHandleByName)
-GUEST_FUNCTION_HOOK(sub_829FE9A0, VideoHooks::ProgramBuffer_Initialize)
-GUEST_FUNCTION_HOOK(sub_82BCE6B0, VideoHooks::Technique_SetParamsFromShader)
-GUEST_FUNCTION_HOOK(sub_82365A88, VideoHooks::StateShadow_SetPixelProgram)
 
 GUEST_FUNCTION_STUB(sub_8233F578) // D3DDevice_SetShaderGPRAllocation
 GUEST_FUNCTION_STUB(sub_8235FBE8) // D3DDevice_SetScissorRect

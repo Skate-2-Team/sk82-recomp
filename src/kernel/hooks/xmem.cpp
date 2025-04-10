@@ -86,6 +86,23 @@ namespace Hooks
         return address;
     }
 
+    uint32_t Hooks_VirtualFree(void *lpAddress, unsigned int dwSize, unsigned int dwFreeType)
+    {
+        if (dwFreeType < 0 && dwSize)
+        {
+            return 0;
+        }
+
+        if (lpAddress)
+        {
+            g_heap->Free(lpAddress);
+
+            Log::Info("VirtualFree", "Free -> ", dwSize, " bytes at ", (void *)lpAddress);
+        }
+
+        return true;
+    }
+
     // If we don't implement this, the EA allocator tries to allocate 4gb of heap space
     void Import_MmQueryStatistics(_MM_STATISTICS *statistics)
     {
@@ -184,6 +201,7 @@ namespace Hooks
     void Import_NtFreeVirtualMemory()
     {
         Log::Info("NtFreeVirtualMemory", "TRYING TO FREE.");
+        DebugBreak();
     }
 
     void Import_RtlFillMemoryUlong()
@@ -198,6 +216,8 @@ namespace Hooks
 }
 
 GUEST_FUNCTION_HOOK(sub_82C72B88, Hooks::Hooks_VirtualAllocEx)
+GUEST_FUNCTION_HOOK(sub_82C72C70, Hooks::Hooks_VirtualFree)
+
 GUEST_FUNCTION_HOOK(sub_82C77290, Hooks::Hooks_RtlAllocateHeap)
 GUEST_FUNCTION_HOOK(sub_82C77B60, Hooks::Hooks_RtlFreeHeap)
 GUEST_FUNCTION_HOOK(sub_82C77E50, Hooks::Hooks_RtlReAllocateHeap)

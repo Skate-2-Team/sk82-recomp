@@ -13,8 +13,8 @@
 #include "kernel/xbox.h"
 #include "ppc/ppc_recomp_shared.h"
 #include "video.h"
-#include "game/game_structs.h"
 #include "utils/tsqueue.h"
+#include "shaders.h"
 
 namespace VideoHooks
 {
@@ -325,10 +325,6 @@ namespace VideoHooks
         UINT pitch = 0;
         UINT height = 0;
     };
-
-    inline IDirect3DVertexShader9 *g_pVertexShader = nullptr;
-    inline IDirect3DPixelShader9 *g_pPixelShader = nullptr;
-    inline std::atomic<bool> g_isShaderLoaded = false;
 
     inline std::map<uint32_t, GuestTexture *> g_textureMap;
 

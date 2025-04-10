@@ -563,7 +563,21 @@ namespace Hooks
     {
         Log::Stub("KeEnterCriticalRegion", "Called.");
     }
+
+    // Last Errors
+    int Hooks_RtlSetLastNTError(int Status)
+    {
+        return 0;
+    }
+
+    void Hooks_RtlSetLastError(int dwErrCode)
+    {
+        return;
+    }
 }
+
+GUEST_FUNCTION_HOOK(sub_82C78FC0, Hooks::Hooks_RtlSetLastNTError)
+GUEST_FUNCTION_HOOK(sub_82C78FA8, Hooks::Hooks_RtlSetLastError)
 
 // RaiseException
 GUEST_FUNCTION_HOOK(sub_82C78920, Hooks::Hooks_RaiseException)

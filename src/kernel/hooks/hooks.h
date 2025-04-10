@@ -278,7 +278,7 @@ namespace Hooks
 
             if (ownerThreadId != currentThread)
             {
-                Log::Error("Mutant::Release", "Thread ", currentThread, " attempted to release a mutant owned by thread ", ownerThreadId);
+                // Log::Error("Mutant::Release", "Thread ", currentThread, " attempted to release a mutant owned by thread ", ownerThreadId);
                 return false;
             }
 

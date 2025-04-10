@@ -54,6 +54,9 @@ add_executable(${TARGET_NAME}
 
     src/input/input_hooks.cpp
 
+    src/graphics/shaders.cpp
+    src/graphics/shaders.h
+
     src/loader.cpp
     src/loader.h
 

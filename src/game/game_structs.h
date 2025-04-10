@@ -42,6 +42,7 @@ namespace renderengine
 
         // When D3D::CreatePixelShader is called, the game passes in ProgramBuffer + 20 as the shader object.
         IDirect3DPixelShader9 *m_pixelShader; // 20
+        char *m_shaderName;
     };
 
     struct ProgramVariableHandle
