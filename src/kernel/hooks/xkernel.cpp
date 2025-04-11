@@ -197,16 +197,6 @@ namespace Hooks
         Log::Stub("RtlUnwind", "Called.");
     }
 
-    void Import_XMAReleaseContext()
-    {
-        Log::Stub("XMAReleaseContext", "Called.");
-    }
-
-    void Import_XMACreateContext()
-    {
-        Log::Stub("XMACreateContext", "Called.");
-    }
-
     void Import_RtlCaptureContext()
     {
         Log::Stub("RtlCaptureContext", "Called.");
@@ -233,31 +223,6 @@ namespace Hooks
         Log::Stub("VSNPrintf", "Called.");
     }
 
-    void Import_XMADisableContext()
-    {
-        Log::Stub("XMADisableContext", "Called.");
-    }
-
-    void Import_XMAGetOutputBufferWriteOffset()
-    {
-        Log::Stub("XMAGetOutputBufferWriteOffset", "Called.");
-    }
-
-    void Import_XMAInitializeContext()
-    {
-        Log::Stub("XMAInitializeContext", "Called.");
-    }
-
-    void Import_XMAIsInputBuffer0Valid()
-    {
-        Log::Stub("XMAIsInputBuffer0Valid", "Called.");
-    }
-
-    void Import_XMASetInputBuffer1()
-    {
-        Log::Stub("XMASetInputBuffer1", "Called.");
-    }
-
     void Import_XNotifyDelayUI()
     {
         Log::Stub("XNotifyDelayUI", "Called.");
@@ -271,56 +236,6 @@ namespace Hooks
     void Import_StfsCreateDevice()
     {
         Log::Stub("StfsCreateDevice", "Called.");
-    }
-
-    void Import_XMAEnableContext()
-    {
-        Log::Stub("XMAEnableContext", "Called.");
-    }
-
-    void Import_XMAGetOutputBufferReadOffset()
-    {
-        Log::Stub("XMAGetOutputBufferReadOffset", "Called.");
-    }
-
-    void Import_XMAIsInputBuffer1Valid()
-    {
-        Log::Stub("XMAIsInputBuffer1Valid", "Called.");
-    }
-
-    void Import_XMAIsOutputBufferValid()
-    {
-        Log::Stub("XMAIsOutputBufferValid", "Called.");
-    }
-
-    void Import_XMASetInputBuffer0()
-    {
-        Log::Stub("XMASetInputBuffer0", "Called.");
-    }
-
-    void Import_XMASetInputBuffer0Valid()
-    {
-        Log::Stub("XMASetInputBuffer0Valid", "Called.");
-    }
-
-    void Import_XMASetInputBuffer1Valid()
-    {
-        Log::Stub("XMASetInputBuffer1Valid", "Called.");
-    }
-
-    void Import_XMASetInputBufferReadOffset()
-    {
-        Log::Stub("XMASetInputBufferReadOffset", "Called.");
-    }
-
-    void Import_XMASetOutputBufferReadOffset()
-    {
-        Log::Stub("XMASetOutputBufferReadOffset", "Called.");
-    }
-
-    void Import_XMASetOutputBufferValid()
-    {
-        Log::Stub("XMASetOutputBufferValid", "Called.");
     }
 
     void Import_XeCryptSha()
@@ -707,9 +622,129 @@ namespace Hooks
     {
         Log::Stub("XeCryptShaUpdate", "Called.");
     }
+
+    // XMA Implementations
+    void Import_XMAReleaseContext()
+    {
+        Log::Stub("XMAReleaseContext", "Called.");
+    }
+
+    HRESULT Import_XMACreateContext()
+    {
+        Log::Stub("XMACreateContext", "Called.");
+
+        return STATUS_SUCCESS;
+    }
+
+    HRESULT Import_XMADisableContext()
+    {
+        Log::Stub("XMADisableContext", "Called.");
+
+        return STATUS_SUCCESS;
+    }
+
+    DWORD Import_XMAGetOutputBufferWriteOffset()
+    {
+        Log::Stub("XMAGetOutputBufferWriteOffset", "Called.");
+
+        return 0;
+    }
+
+    void Import_XMAInitializeContext()
+    {
+        Log::Stub("XMAInitializeContext", "Called.");
+    }
+
+    BOOL Import_XMAIsInputBuffer0Valid()
+    {
+        Log::Stub("XMAIsInputBuffer0Valid", "Called.");
+
+        return true;
+    }
+
+    BOOL Import_XMAIsInputBuffer1Valid()
+    {
+        Log::Stub("XMAIsInputBuffer1Valid", "Called.");
+
+        return true;
+    }
+
+    void Import_XMASetInputBuffer1()
+    {
+        Log::Stub("XMASetInputBuffer1", "Called.");
+    }
+
+    void Import_XMASetInputBuffer0()
+    {
+        Log::Stub("XMASetInputBuffer0", "Called.");
+    }
+
+    void Import_XMAEnableContext()
+    {
+        Log::Stub("XMAEnableContext", "Called.");
+    }
+
+    DWORD Import_XMAGetOutputBufferReadOffset()
+    {
+        Log::Stub("XMAGetOutputBufferReadOffset", "Called.");
+
+        return 0;
+    }
+
+    BOOL Import_XMAIsOutputBufferValid()
+    {
+        Log::Stub("XMAIsOutputBufferValid", "Called.");
+
+        return true;
+    }
+
+    void Import_XMASetInputBuffer0Valid()
+    {
+        Log::Stub("XMASetInputBuffer0Valid", "Called.");
+    }
+
+    void Import_XMASetInputBuffer1Valid()
+    {
+        Log::Stub("XMASetInputBuffer1Valid", "Called.");
+    }
+
+    void Import_XMASetInputBufferReadOffset()
+    {
+        Log::Stub("XMASetInputBufferReadOffset", "Called.");
+    }
+
+    void Import_XMASetOutputBufferReadOffset()
+    {
+        Log::Stub("XMASetOutputBufferReadOffset", "Called.");
+    }
+
+    void Import_XMASetOutputBufferValid()
+    {
+        Log::Stub("XMASetOutputBufferValid", "Called.");
+    }
 }
 
+// Stubs
 GUEST_FUNCTION_STUB(sub_82C69308) // NetTick
+
+// XMA Functions
+GUEST_FUNCTION_HOOK(__imp__XMAEnableContext, Hooks::Import_XMAEnableContext)
+GUEST_FUNCTION_HOOK(__imp__XMAGetOutputBufferReadOffset, Hooks::Import_XMAGetOutputBufferReadOffset)
+GUEST_FUNCTION_HOOK(__imp__XMAIsInputBuffer1Valid, Hooks::Import_XMAIsInputBuffer1Valid)
+GUEST_FUNCTION_HOOK(__imp__XMAIsOutputBufferValid, Hooks::Import_XMAIsOutputBufferValid)
+GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer0, Hooks::Import_XMASetInputBuffer0)
+GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer0Valid, Hooks::Import_XMASetInputBuffer0Valid)
+GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer1Valid, Hooks::Import_XMASetInputBuffer1Valid)
+GUEST_FUNCTION_HOOK(__imp__XMASetInputBufferReadOffset, Hooks::Import_XMASetInputBufferReadOffset)
+GUEST_FUNCTION_HOOK(__imp__XMASetOutputBufferReadOffset, Hooks::Import_XMASetOutputBufferReadOffset)
+GUEST_FUNCTION_HOOK(__imp__XMASetOutputBufferValid, Hooks::Import_XMASetOutputBufferValid)
+GUEST_FUNCTION_HOOK(__imp__XMADisableContext, Hooks::Import_XMADisableContext)
+GUEST_FUNCTION_HOOK(__imp__XMAGetOutputBufferWriteOffset, Hooks::Import_XMAGetOutputBufferWriteOffset)
+GUEST_FUNCTION_HOOK(__imp__XMAInitializeContext, Hooks::Import_XMAInitializeContext)
+GUEST_FUNCTION_HOOK(__imp__XMAIsInputBuffer0Valid, Hooks::Import_XMAIsInputBuffer0Valid)
+GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer1, Hooks::Import_XMASetInputBuffer1)
+GUEST_FUNCTION_HOOK(__imp__XMAReleaseContext, Hooks::Import_XMAReleaseContext)
+GUEST_FUNCTION_HOOK(__imp__XMACreateContext, Hooks::Import_XMACreateContext)
 
 GUEST_FUNCTION_HOOK(sub_82C72188, Hooks::Hooks_RtlOutputDebugString)
 GUEST_FUNCTION_HOOK(sub_82C7A598, Hooks::Hooks_XapiInitProcess)
@@ -720,6 +755,7 @@ GUEST_FUNCTION_HOOK(__imp__XeCryptShaFinal, Hooks::Import_XeCryptShaFinal)
 GUEST_FUNCTION_HOOK(__imp__XeCryptShaInit, Hooks::Import_XeCryptShaInit)
 GUEST_FUNCTION_HOOK(__imp__XeCryptShaUpdate, Hooks::Import_XeCryptShaUpdate)
 GUEST_FUNCTION_HOOK(__imp__XeCryptMd5Final, Hooks::Import_XeCryptMd5Final)
+GUEST_FUNCTION_HOOK(__imp__XeCryptSha, Hooks::Import_XeCryptSha)
 
 GUEST_FUNCTION_HOOK(__imp__CurlOpenTitleBackingFile, Hooks::Import_CurlOpenTitleBackingFile)
 GUEST_FUNCTION_HOOK(__imp__NetDll_WSACloseEvent, Hooks::Import_NetDll_WSACloseEvent)
@@ -793,17 +829,6 @@ GUEST_FUNCTION_HOOK(__imp__IoSetShareAccess, Hooks::Import_IoSetShareAccess)
 GUEST_FUNCTION_HOOK(__imp__FscSetCacheElementCount, Hooks::Import_FscSetCacheElementCount)
 GUEST_FUNCTION_HOOK(__imp__StfsControlDevice, Hooks::Import_StfsControlDevice)
 GUEST_FUNCTION_HOOK(__imp__StfsCreateDevice, Hooks::Import_StfsCreateDevice)
-GUEST_FUNCTION_HOOK(__imp__XMAEnableContext, Hooks::Import_XMAEnableContext)
-GUEST_FUNCTION_HOOK(__imp__XMAGetOutputBufferReadOffset, Hooks::Import_XMAGetOutputBufferReadOffset)
-GUEST_FUNCTION_HOOK(__imp__XMAIsInputBuffer1Valid, Hooks::Import_XMAIsInputBuffer1Valid)
-GUEST_FUNCTION_HOOK(__imp__XMAIsOutputBufferValid, Hooks::Import_XMAIsOutputBufferValid)
-GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer0, Hooks::Import_XMASetInputBuffer0)
-GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer0Valid, Hooks::Import_XMASetInputBuffer0Valid)
-GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer1Valid, Hooks::Import_XMASetInputBuffer1Valid)
-GUEST_FUNCTION_HOOK(__imp__XMASetInputBufferReadOffset, Hooks::Import_XMASetInputBufferReadOffset)
-GUEST_FUNCTION_HOOK(__imp__XMASetOutputBufferReadOffset, Hooks::Import_XMASetOutputBufferReadOffset)
-GUEST_FUNCTION_HOOK(__imp__XMASetOutputBufferValid, Hooks::Import_XMASetOutputBufferValid)
-GUEST_FUNCTION_HOOK(__imp__XeCryptSha, Hooks::Import_XeCryptSha)
 GUEST_FUNCTION_HOOK(__imp__XeKeysConsolePrivateKeySign, Hooks::Import_XeKeysConsolePrivateKeySign)
 GUEST_FUNCTION_HOOK(__imp__XeKeysConsoleSignatureVerification, Hooks::Import_XeKeysConsoleSignatureVerification)
 GUEST_FUNCTION_HOOK(__imp___snprintf, Hooks::Import__snprintf)
@@ -835,14 +860,6 @@ GUEST_FUNCTION_HOOK(__imp__RtlInitAnsiString, Hooks::Import_RtlInitAnsiString)
 GUEST_FUNCTION_HOOK(__imp__RtlMultiByteToUnicodeN, Hooks::Import_RtlMultiByteToUnicodeN)
 GUEST_FUNCTION_HOOK(__imp__RtlCaptureContext, Hooks::Import_RtlCaptureContext)
 GUEST_FUNCTION_HOOK(__imp__RtlUnwind, Hooks::Import_RtlUnwind)
-
-GUEST_FUNCTION_HOOK(__imp__XMADisableContext, Hooks::Import_XMADisableContext)
-GUEST_FUNCTION_HOOK(__imp__XMAGetOutputBufferWriteOffset, Hooks::Import_XMAGetOutputBufferWriteOffset)
-GUEST_FUNCTION_HOOK(__imp__XMAInitializeContext, Hooks::Import_XMAInitializeContext)
-GUEST_FUNCTION_HOOK(__imp__XMAIsInputBuffer0Valid, Hooks::Import_XMAIsInputBuffer0Valid)
-GUEST_FUNCTION_HOOK(__imp__XMASetInputBuffer1, Hooks::Import_XMASetInputBuffer1)
-GUEST_FUNCTION_HOOK(__imp__XMAReleaseContext, Hooks::Import_XMAReleaseContext)
-GUEST_FUNCTION_HOOK(__imp__XMACreateContext, Hooks::Import_XMACreateContext)
 
 GUEST_FUNCTION_HOOK(__imp__ObDereferenceObject, Hooks::Import_ObDereferenceObject)
 GUEST_FUNCTION_HOOK(__imp__ObReferenceObjectByHandle, Hooks::Import_ObReferenceObjectByHandle)

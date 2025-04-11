@@ -82,34 +82,23 @@ namespace Shaders
         }
 
         ID3DBlob *pPSBlob = nullptr;
-        if (CompileShaderFromFile(L"shaders//vp6.fx", "defaultPS", "ps_3_0", &pPSBlob))
-        {
-            g_shaderErrorCount += g_video->m_d3dDevice->CreatePixelShader((const DWORD *)pPSBlob->GetBufferPointer(), &g_pPixelShader);
-            pPSBlob->Release();
-        }
+        CompileShaderFromFile(L"shaders//vp6.fx", "defaultPS", "ps_3_0", &pPSBlob);
 
         g_isShaderLoaded = (g_shaderErrorCount == 0);
-
-        // This is dangerous under any circumstances that SetPixelShader somehow gets called before this, just for debug atm.
-        StateShadow::curPixelProgramBuffer = Memory::Translate<be<uint32_t> *>(0x82DF33F8);
     }
 
     void D3DDevice_SetVertexShader(void *pDevice, void *pShader)
     {
     }
 
-    void StateShadow_SetPixelProgram(renderengine::ProgramBuffer *pProg)
+    void D3DDevice_SetPixelShader(void *pDevice, uint32_t *pShader)
     {
-        if (Memory::MapVirtual(pProg) != StateShadow::curPixelProgramBuffer->get())
+        // check if the shader is in the map
+        auto it = g_pPixelShaders.find(*pShader);
+
+        if (it != g_pPixelShaders.end())
         {
-            // Log::Info("StateShadow_SetPixelProgram", "Setting pixel shader: ", pProg->m_shaderName);
-
-            if (pProg)
-            {
-                g_video->m_d3dDevice->SetPixelShader(pProg->m_pixelShader);
-            }
-
-            StateShadow::curPixelProgramBuffer->set(Memory::MapVirtual(pProg));
+            g_video->m_d3dDevice->SetPixelShader(it->second);
         }
     }
 
@@ -132,7 +121,7 @@ namespace Shaders
         // alloc new prog buffer on guest heap
         auto progBuffer = (renderengine::ProgramBuffer *)g_heap->AllocPhysical(sizeof(renderengine::ProgramBuffer), 128);
         progBuffer->m_type = renderengine::Type::TYPE_PIXEL;
-        progBuffer->m_pixelShader = nullptr;
+        progBuffer->m_pixelShaderID = 0;
 
         progBuffer->m_shaderName = new char[hostPath.size() + 1];
         strcpy(progBuffer->m_shaderName, hostPath.c_str());
@@ -149,8 +138,8 @@ namespace Shaders
             shaderFile.read(shaderData.data(), fileSize);
             shaderFile.close();
 
-            ID3DBlob *pVSBlob = nullptr;
-            HRESULT hr = g_video->m_d3dDevice->CreatePixelShader((const DWORD *)shaderData.data(), &progBuffer->m_pixelShader);
+            IDirect3DPixelShader9 *pSBlob = nullptr;
+            HRESULT hr = g_video->m_d3dDevice->CreatePixelShader((const DWORD *)shaderData.data(), &pSBlob);
 
             if (FAILED(hr))
             {
@@ -158,7 +147,13 @@ namespace Shaders
                 DebugBreak();
             }
 
-            Log::Info("ProgramBuffer_Initialize", "Created pixel shader: ", hostPath, " | Address -> ", progBuffer->m_pixelShader, " Heap Address -> ", progBuffer);
+            // hash shader name using xxHash
+            uint32_t hash = XXH32(hostPath.c_str(), hostPath.size(), 0);
+
+            g_pPixelShaders[hash] = pSBlob;
+            progBuffer->m_pixelShaderID = hash;
+
+            Log::Info("ProgramBuffer_Initialize", "Created pixel shader: -> ", hash);
         }
         else
         {
@@ -189,7 +184,7 @@ namespace Shaders
 
 // D3D Hooks
 GUEST_FUNCTION_HOOK(sub_82364E98, Shaders::D3DDevice_SetVertexShader)
-GUEST_FUNCTION_HOOK(sub_82365A88, Shaders::StateShadow_SetPixelProgram)
+GUEST_FUNCTION_HOOK(sub_82365AE8, Shaders::D3DDevice_SetPixelShader)
 
 // Game Hooks
 GUEST_FUNCTION_HOOK(sub_829FEB90, Shaders::ProgramBuffer_GetVariableHandleByName)

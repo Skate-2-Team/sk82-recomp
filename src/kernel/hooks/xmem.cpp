@@ -158,14 +158,14 @@ namespace Hooks
         statistics->HighestPhysicalPage = statistics->TotalPhysicalPages - 1;
     }
 
-    void Import_MmQueryAddressProtect()
+    uint32_t Import_MmQueryAddressProtect(uint32_t guestAddress)
     {
-        // Log::Stub("MmQueryAddressProtect", "Called.");
+        return PAGE_READWRITE;
     }
 
-    void Import_MmGetPhysicalAddress()
+    uint32_t Import_MmGetPhysicalAddress(uint32_t address)
     {
-        Log::Stub("MmGetPhysicalAddress", "Called.");
+        return address;
     }
 
     void Import_MmSetAddressProtect()

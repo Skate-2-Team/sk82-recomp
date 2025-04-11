@@ -68,6 +68,8 @@ namespace VideoHooks
 
         void BeginVerticesBatch::Process()
         {
+            // Log::Info("BeginVertices", "PrimType -> ", primType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
+
             // process the batch
             if (primType == XD3DPT_QUADLIST && stride == 24 && Shaders::g_isShaderLoaded)
             {
@@ -100,6 +102,9 @@ namespace VideoHooks
 
                 // c4 - g_matVP
                 // c5 - i_matWorld
+
+                float texSizeUV[2] = {640.0f, 360.0f};
+                g_video->m_d3dDevice->SetPixelShaderConstantF(20, texSizeUV, 1); // 1 vector = 4 floats (we only use 2)
 
                 g_video->m_d3dDevice->SetVertexShaderConstantF(4, (float *)&matVp, 4);
                 g_video->m_d3dDevice->SetVertexShaderConstantF(8, (float *)&matWorld, 4);
@@ -193,6 +198,9 @@ namespace VideoHooks
         g_video->m_d3dDevice->EndScene();
 
         g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
+
+        // chrono for 16ms
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
     PPC_FUNC_IMPL(__imp__sub_829CF1F0);
@@ -290,7 +298,7 @@ namespace VideoHooks
         unsigned int Stencil,
         int EDRAMClear)
     {
-        // g_video->m_d3dDevice->Clear(Count, (_D3DRECT *)pRects, Flags, 0xFF000000, Z, Stencil);
+        g_video->m_d3dDevice->Clear(Count, (_D3DRECT *)pRects, Flags, 0xFF000000, Z, Stencil);
     }
 
     void D3DDevice_ClearF(
@@ -300,7 +308,7 @@ namespace VideoHooks
         double Z,
         void *Stencil)
     {
-        // g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
+        g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
     }
 
     PPC_FUNC_IMPL(__imp__sub_829EF3B8);

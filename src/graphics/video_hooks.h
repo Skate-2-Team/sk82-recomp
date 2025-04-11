@@ -15,6 +15,7 @@
 #include "video.h"
 #include "utils/tsqueue.h"
 #include "shaders.h"
+#include "game/game_structs.h"
 
 namespace VideoHooks
 {
@@ -73,14 +74,6 @@ namespace VideoHooks
         uint32_t mContext[3];
         bool mDropFrameFlag;
         bool mFlipFlag;
-    };
-
-    enum TexType : uint32_t
-    {
-        TYPE_NA = 0xFFFFFFFF,
-        TYPE_VERTEX = 0x0,
-        TYPE_PIXEL = 0x1,
-        TYPE_FORCEENUMSIZEINT = 0x7FFFFFFF,
     };
 
     enum PixelFormat : uint32_t
@@ -239,7 +232,7 @@ namespace VideoHooks
 
     struct TextureParameters
     {
-        be<TexType> type;
+        be<renderengine::Type> type;
         be<unsigned int> flags;
         be<unsigned int> width;
         be<unsigned int> height;

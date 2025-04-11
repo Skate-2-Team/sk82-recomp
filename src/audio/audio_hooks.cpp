@@ -17,6 +17,9 @@ namespace AudioHooks
     // Needs to be properly implemented
     static void AudioThread()
     {
+        std::wstring threadName = L"XAudioClientThread";
+        SetThreadDescription(GetCurrentThread(), threadName.c_str());
+
         GuestThreadContext ctx(0);
 
         while (true)
@@ -40,10 +43,6 @@ namespace AudioHooks
         g_clientCallbackParam = Memory::MapVirtual(pClientParam);
         g_clientCallback = callback;
 
-        // set thread name
-        std::wstring threadName = L"XAudioClientThread";
-        SetThreadDescription(GetCurrentThread(), threadName.c_str());
-
         g_audioThread = std::make_unique<std::thread>(AudioThread);
     }
 
@@ -65,7 +64,7 @@ namespace AudioHooks
         return 0;
     }
 
-    uint32_t Import_XAudioSubmitRenderDriverFrame(uint32_t driver)
+    uint32_t Import_XAudioSubmitRenderDriverFrame(uint32_t driver, void *samples)
     {
         return 0;
     }

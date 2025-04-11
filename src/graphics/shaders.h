@@ -2,6 +2,7 @@
 
 #include "video_hooks.h"
 #include "game/game_structs.h"
+#include <xxhash.h>
 
 namespace Shaders
 {
@@ -23,12 +24,8 @@ namespace Shaders
     inline int g_shaderErrorCount = 0;
 
     inline IDirect3DVertexShader9 *g_pVertexShader = nullptr;
-    inline IDirect3DPixelShader9 *g_pPixelShader = nullptr;
 
-    namespace StateShadow
-    {
-        inline be<uint32_t> *curPixelProgramBuffer = nullptr;
-    }
+    inline std::map<uint32_t, IDirect3DPixelShader9 *> g_pPixelShaders;
 
     void PrecompileShaders();
 }

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <vector>
 #include <ankerl/unordered_dense.h>
+#include <map>
 
 #include "ppc/ppc_recomp_shared.h"
 #include "kernel/memory.h"

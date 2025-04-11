@@ -109,6 +109,9 @@ namespace Hooks
 #endif
     }
 
+    static std::map<XRTL_CRITICAL_SECTION *, uint32_t> g_criticalSections;
+    static std::mutex g_criticalSectionsMutex;
+
     void Import_RtlEnterCriticalSection(XRTL_CRITICAL_SECTION *cs)
     {
         auto currentThread = PPCLocal::g_ppcContext->r13.u32;
@@ -124,6 +127,12 @@ namespace Hooks
             if (owningThread.compare_exchange_weak(previousOwner, currentThread) || previousOwner == currentThread)
             {
                 cs->RecursionCount++;
+
+                {
+                    std::lock_guard<std::mutex> lock(g_criticalSectionsMutex);
+                    g_criticalSections[cs] = GetCurrentThreadId();
+                }
+
                 return;
             }
 
@@ -137,6 +146,11 @@ namespace Hooks
 
         if (cs->RecursionCount != 0)
             return;
+
+        {
+            std::lock_guard<std::mutex> lock(g_criticalSectionsMutex);
+            g_criticalSections.erase(cs);
+        }
 
         std::atomic_ref owningThread(cs->OwningThread);
         owningThread.store(0);
@@ -155,7 +169,20 @@ namespace Hooks
         if (owningThread.compare_exchange_weak(previousOwner, thisThread) || previousOwner == thisThread)
         {
             cs->RecursionCount++;
+
+            {
+                std::lock_guard<std::mutex> lock(g_criticalSectionsMutex);
+                g_criticalSections[cs] = GetCurrentThreadId();
+            }
+
             return true;
+        }
+
+        {
+            // print out
+            std::lock_guard<std::mutex> lock(g_criticalSectionsMutex);
+
+            Log::Info("RtlTryEnterCriticalSection", "Thread ", GetCurrentThreadId(), " failed to enter critical section owned by thread ", g_criticalSections[cs]);
         }
 
         return false;
@@ -279,9 +306,6 @@ namespace Hooks
 
     uint32_t Import_KeDelayExecutionThread(uint32_t WaitMode, bool Alertable, be<int64_t> *Timeout)
     {
-        if (Alertable)
-            return STATUS_USER_APC;
-
         uint32_t timeout = GuestTimeoutToMilliseconds(Timeout);
 
 #ifdef _WIN32
