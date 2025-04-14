@@ -29,6 +29,18 @@ namespace VideoHooks
         be<float> m[4][4];
     };
 
+    struct TriangleVertex
+    {
+        float x, y, z, w;
+        float u, v;
+    };
+
+    struct QuadListVertex
+    {
+        be<float> x, y, z, w;
+        be<float> u, v;
+    };
+
     struct D3DRectSwapped
     {
         be<int> x1;
@@ -263,6 +275,7 @@ namespace VideoHooks
         enum BatchType
         {
             BatchType_BeginVertices,
+            BatchType_SetPixelShader,
             BatchType_SetViewPort,
             BatchType_Unknown,
         };
@@ -272,8 +285,8 @@ namespace VideoHooks
             BatchType m_type;
 
             BatchInfo(BatchType type) : m_type(type) {};
-
             virtual ~BatchInfo() = default;
+
             virtual void Process() = 0;
         };
 
@@ -287,7 +300,6 @@ namespace VideoHooks
             uint32_t stride = 0;
 
             BeginVerticesBatch() : BatchInfo(BatchType_BeginVertices) {};
-
             ~BeginVerticesBatch() override
             {
                 if (memory != nullptr)
@@ -309,6 +321,16 @@ namespace VideoHooks
 
             void Process() override;
         };
+
+        struct SetPixelShaderBatch : public BatchInfo
+        {
+            uint32_t shaderKey = 0;
+
+            SetPixelShaderBatch() : BatchInfo(BatchType_SetPixelShader) {};
+            ~SetPixelShaderBatch() override = default;
+
+            void Process() override;
+        };
     }
 
     struct GuestTexture
@@ -319,19 +341,11 @@ namespace VideoHooks
         UINT height = 0;
     };
 
-    inline std::map<uint32_t, GuestTexture *> g_textureMap;
-
     inline Matrix4x4Swap *g_matVP = nullptr;
-
-    inline IDirect3DTexture9 *lumTex = nullptr;
-    inline IDirect3DTexture9 *blueTex = nullptr;
-    inline IDirect3DTexture9 *redTex = nullptr;
 
     inline void *globalBuffer = nullptr;
     inline int lastSize = 0;
 
-    inline bool g_sceneActive = false;
-
+    inline std::map<uint32_t, GuestTexture *> g_textureMap;
     inline ThreadSafeQueue<Batches::BatchInfo *> batchQueue;
-    inline std::mutex queueMutex;
 }

@@ -97,6 +97,25 @@ struct be
     }
 };
 
+template <typename T, typename U>
+void ConvertMatrix(const T &source, U &dest)
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        for (int j = 0; j < 4; ++j)
+        {
+            if constexpr (std::is_same_v<typename std::decay<decltype(source.m[i][j])>::type, be<float>>)
+            {
+                dest.m[i][j] = source.m[i][j].get();
+            }
+            else
+            {
+                dest.m[i][j] = source.m[i][j];
+            }
+        }
+    }
+}
+
 enum Xex2CompressionType
 {
     XEX_COMPRESSION_NONE = 0,

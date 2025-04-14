@@ -6,7 +6,6 @@ This class handles all shader hooks and shader related functionality.
 
 namespace Shaders
 {
-
     static std::string UPDBNameToHostShader(std::string filePath, XenosShaderType type)
     {
         // parse as file path
@@ -87,44 +86,40 @@ namespace Shaders
         g_isShaderLoaded = (g_shaderErrorCount == 0);
     }
 
-    void D3DDevice_SetVertexShader(void *pDevice, void *pShader)
+    void D3DDevice_SetVertexShader(void *pDevice, uint32_t pShader)
     {
     }
 
-    void D3DDevice_SetPixelShader(void *pDevice, uint32_t *pShader)
+    void D3DDevice_SetPixelShader(void *pDevice, uint32_t pShader)
     {
-        // check if the shader is in the map
-        auto it = g_pPixelShaders.find(*pShader);
+        auto pixelShaderBatch = new VideoHooks::Batches::SetPixelShaderBatch;
 
-        if (it != g_pPixelShaders.end())
-        {
-            g_video->m_d3dDevice->SetPixelShader(it->second);
-        }
+        pixelShaderBatch->shaderKey = pShader;
+
+        VideoHooks::batchQueue.push(pixelShaderBatch);
     }
 
     PPC_FUNC_IMPL(__imp__sub_829FE9A0);
     renderengine::ProgramBuffer *ProgramBuffer_Initialize(void *resource, const renderengine::ProgBuffer_Parameters *params)
     {
-        // we can figure out what shader it is by looking at the updb file name entry in the bytecode
-        // and processing the filename
-        // shaders that are loaded via files, the params->size == 4, otherwise its embedded bytecode and will have an actual size.
+        // we can figure out what shader it is by looking at the updb file name entry in the bytecode and processing the filename
+        // shaders that are loaded via files, the params->m_size == 4, otherwise its embedded bytecode and will have an actual size.
 
         __imp__sub_829FE9A0(*PPCLocal::g_ppcContext, Memory::g_base);
 
+        auto gamesProgBuffer = Memory::Translate<renderengine::ProgramBuffer *>(PPCLocal::g_ppcContext->r3.u32);
+
         if (params->m_size != 4 || params->m_type != renderengine::Type::TYPE_PIXEL)
-            return (renderengine::ProgramBuffer *)PPCLocal::g_ppcContext->r3.u32;
+            return (renderengine::ProgramBuffer *)Memory::MapVirtual(gamesProgBuffer);
 
         // only support pixel shaders right now.
         XenosShaderHeader *shaderHeader = Memory::Translate<XenosShaderHeader *>(params->m_buffer);
         std::string hostPath = UPDBNameToHostShader(shaderHeader->m_updbPath, shaderHeader->m_type);
 
-        // alloc new prog buffer on guest heap
-        auto progBuffer = (renderengine::ProgramBuffer *)g_heap->AllocPhysical(sizeof(renderengine::ProgramBuffer), 128);
-        progBuffer->m_type = renderengine::Type::TYPE_PIXEL;
-        progBuffer->m_pixelShaderID = 0;
+        uint32_t id = Memory::MapVirtual(&gamesProgBuffer->m_pixelShaderID);
 
-        progBuffer->m_shaderName = new char[hostPath.size() + 1];
-        strcpy(progBuffer->m_shaderName, hostPath.c_str());
+        g_pPixelShaderNames[id] = std::string(hostPath);
+        g_pPixelShaders[id] = nullptr;
 
         std::ifstream shaderFile(hostPath, std::ios::binary);
         if (shaderFile.is_open())
@@ -147,38 +142,16 @@ namespace Shaders
                 DebugBreak();
             }
 
-            // hash shader name using xxHash
-            uint32_t hash = XXH32(hostPath.c_str(), hostPath.size(), 0);
+            g_pPixelShaders[id] = pSBlob;
 
-            g_pPixelShaders[hash] = pSBlob;
-            progBuffer->m_pixelShaderID = hash;
-
-            Log::Info("ProgramBuffer_Initialize", "Created pixel shader: -> ", hash);
+            Log::Info("ProgramBuffer_Initialize", "Created pixel shader: -> ", id);
         }
         else
         {
             Log::Error("ProgramBuffer_Initialize", "Trying to load shader that doesn't exist -> ", hostPath);
         }
 
-        return progBuffer;
-    }
-
-    int ProgramBuffer_GetVariableHandleByName(void *, void *, renderengine::ProgramVariableHandle *stateHandle)
-    {
-        // handle is stack allocated
-
-        stateHandle->m_dataType = 0;
-        stateHandle->m_programType = 0;
-        stateHandle->m_numConstants = 0;
-        stateHandle->m_index = 0;
-
-        return 0;
-    }
-
-    void Technique_SetParamsFromShader()
-    {
-        // no-op
-        return;
+        return (renderengine::ProgramBuffer *)Memory::MapVirtual(gamesProgBuffer);
     }
 }
 
@@ -187,6 +160,4 @@ GUEST_FUNCTION_HOOK(sub_82364E98, Shaders::D3DDevice_SetVertexShader)
 GUEST_FUNCTION_HOOK(sub_82365AE8, Shaders::D3DDevice_SetPixelShader)
 
 // Game Hooks
-GUEST_FUNCTION_HOOK(sub_829FEB90, Shaders::ProgramBuffer_GetVariableHandleByName)
 GUEST_FUNCTION_HOOK(sub_829FE9A0, Shaders::ProgramBuffer_Initialize)
-GUEST_FUNCTION_HOOK(sub_82BCE6B0, Shaders::Technique_SetParamsFromShader)

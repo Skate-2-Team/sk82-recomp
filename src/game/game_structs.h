@@ -42,7 +42,6 @@ namespace renderengine
 
         // When D3D::CreatePixelShader is called, the game passes in ProgramBuffer + 20 as the shader object.
         uint32_t m_pixelShaderID; // 20
-        char *m_shaderName;
     };
 
     struct ProgramVariableHandle
@@ -51,5 +50,48 @@ namespace renderengine
         unsigned __int8 m_dataType;
         unsigned __int8 m_programType;
         unsigned __int8 m_numConstants;
+    };
+
+    struct D3DResource
+    {
+        unsigned int Common;
+        unsigned int ReferenceCount;
+        unsigned int Fence;
+        unsigned int ReadFence;
+        be<unsigned int> Identifier;
+        unsigned int BaseFlush;
+    };
+
+    union GPUTEXTURE_FETCH_CONSTANT
+    {
+        unsigned int dword[6];
+    };
+
+    struct D3DBaseTexture : D3DResource
+    {
+        unsigned int MipFlush;
+        GPUTEXTURE_FETCH_CONSTANT Format;
+    };
+
+    struct Texture : D3DBaseTexture
+    {
+    };
+
+    inline DWORD GetTextureBaseAddress(D3DBaseTexture *resource)
+    {
+        return ByteSwap(resource->Format.dword[1]) & 0xFFFFFFF0;
+    }
+}
+
+namespace rw
+{
+    template <int N>
+    struct BaseResources
+    {
+        uint32_t m_baseResources[N];
+    };
+
+    struct Resource : BaseResources<5>
+    {
     };
 }
