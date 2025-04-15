@@ -37,24 +37,6 @@ namespace VideoHooks
         return S_OK;
     }
 
-    PPC_FUNC_IMPL(__imp__sub_825E5538);
-    void Sk8_AddParam(
-        uint8_t *thisPtr,
-        uint8_t *type,
-        char *pParmName,
-        void *DataPtr,
-        char uCount)
-    {
-        Log::Info("Sk8_AddParam", "Parm Name -> ", pParmName, ", Data Ptr -> ", DataPtr);
-
-        if (std::string(pParmName) == "g_matVP")
-        {
-            g_matVP = (Matrix4x4Swap *)DataPtr;
-        }
-
-        __imp__sub_825E5538(*PPCLocal::g_ppcContext, Memory::g_base);
-    }
-
     void ConvertQuadListToTriangleList(const QuadListVertex *quadVertices, TriangleVertex *triangleVertices, uint32_t quadCount)
     {
         // XD3DPT_QUADLIST doesn't exist on PC dx9, so we must split the quads into 2 triangles manually.
@@ -97,7 +79,7 @@ namespace VideoHooks
 
     namespace Batches
     {
-        inline uint32_t curShader = 0;
+        inline uint32_t curPixelShader = 0;
 
         void SetViewPortBatch::Process()
         {
@@ -113,15 +95,6 @@ namespace VideoHooks
             {
                 g_video->m_d3dDevice->SetVertexShader(Shaders::g_pVertexShader);
 
-                Matrix4x4 matVp = {0};
-                ConvertMatrix(*g_matVP, matVp);
-
-                Matrix4x4 matWorld;
-                MatrixIdentity(&matWorld);
-
-                g_video->m_d3dDevice->SetVertexShaderConstantF(0, (float *)&matVp, 4);
-                g_video->m_d3dDevice->SetVertexShaderConstantF(4, (float *)&matWorld, 4);
-
                 uint32_t quadCount = vertexCount / 4;
                 uint32_t triangleVertexCount = quadCount * 6;
 
@@ -134,6 +107,18 @@ namespace VideoHooks
                 g_video->m_d3dDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
                 g_video->m_d3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triangleVertexCount / 3, triangleVertices.data(), sizeof(TriangleVertex));
             }
+            else if (primType == XD3DPT_TRIANGLELIST && stride == 24)
+            {
+                auto swappedVertices = (TriangleListVertexSwapped *)(memory);
+                std::vector<TriangleVertex> hostVertices(vertexCount);
+
+                ConvertVertices(swappedVertices, hostVertices.data(), vertexCount);
+
+                g_video->m_d3dDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+                g_video->m_d3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, vertexCount / 3, hostVertices.data(), sizeof(TriangleVertex));
+
+                // Log::Info("TriangleList", "Requesting shader -> ", Shaders::g_pPixelShaderNames[curShader]);
+            }
             else
             {
                 // Log::Info("BeginVertices", "PrimType -> ", primType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
@@ -142,7 +127,7 @@ namespace VideoHooks
 
         void SetPixelShaderBatch::Process()
         {
-            curShader = shaderKey;
+            curPixelShader = shaderKey;
 
             // check if the shader is in the map
             auto it = Shaders::g_pPixelShaders.find(shaderKey);
@@ -152,6 +137,23 @@ namespace VideoHooks
                 // Doesn't matter if shader is null, will only be 0 for that draw call.
                 g_video->m_d3dDevice->SetPixelShader(it->second);
             }
+        }
+
+        void SetTextureBatch::Process()
+        {
+            // check if text is in map
+            auto it = g_textureMap.find(baseTexture->Identifier);
+
+            if (it != g_textureMap.end())
+                g_video->m_d3dDevice->SetTexture(samplerID, it->second->texture);
+        }
+
+        void SetShaderConstantBatch::Process()
+        {
+            if (isPixelShader)
+                g_video->m_d3dDevice->SetPixelShaderConstantF(registerID, constData, vertexCount);
+            else
+                g_video->m_d3dDevice->SetVertexShaderConstantF(registerID, constData, vertexCount);
         }
     }
 
@@ -193,10 +195,6 @@ namespace VideoHooks
     {
         // Log::Info("BeginVertices", "PrimType -> ", PrimitiveType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
 
-        if (PrimitiveType == XD3DPT_TRIANGLELIST && stride == 24)
-        {
-        }
-
         auto batchInfo = new Batches::BeginVerticesBatch();
 
         batchInfo->size = stride * vertexCount;
@@ -232,11 +230,12 @@ namespace VideoHooks
 
     void D3DDevice_SetTexture(void *pDevice, unsigned int Sampler, renderengine::D3DBaseTexture *pTexture)
     {
-        // check if text is in map
-        auto it = g_textureMap.find(pTexture->Identifier);
+        auto textureBatch = new Batches::SetTextureBatch();
 
-        if (it != g_textureMap.end())
-            g_video->m_d3dDevice->SetTexture(Sampler, it->second->texture);
+        textureBatch->baseTexture = pTexture;
+        textureBatch->samplerID = Sampler;
+
+        batchQueue.push(textureBatch);
     }
 
     // Properly implement these
@@ -262,58 +261,52 @@ namespace VideoHooks
         g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
     }
 
-    PPC_FUNC_IMPL(__imp__sub_829EF3B8);
-    void AsyncOp_Open(
-        void *thisPtr,
-        const char *FilePath,
-        unsigned int modeflags,
-        void *doneCallback,
-        void *context,
-        volatile int priority)
-    {
-        Log::Info("AsyncOp_Open", "File Path -> ", FilePath);
-
-        __imp__sub_829EF3B8(*PPCLocal::g_ppcContext, Memory::g_base);
-    }
-
-    // This needs to be fixed, something is passing a null ptr into it, at destPtr.
-    PPC_FUNC_IMPL(__imp__sub_8236C5F8);
-    void RwMemCopy(uint32_t destPtr, uint32_t sourcePtr)
-    {
-        if (destPtr == 0 || sourcePtr == 0)
-        {
-            Log::Error("RwMemCopy", "INVALID MEM COPY: ", destPtr, ", ", sourcePtr);
-            return;
-        }
-
-        __imp__sub_8236C5F8(*PPCLocal::g_ppcContext, Memory::g_base);
-    }
-
     PPC_FUNC_IMPL(__imp__sub_829FF6D0);
     uint32_t Texture_Initialize(rw::Resource *resource, const TextureParameters *params)
     {
         __imp__sub_829FF6D0(*PPCLocal::g_ppcContext, Memory::g_base);
 
-        // currently only store if the type is PIXELFORMAT_LIN_L8
-
         auto texture = Memory::Translate<renderengine::Texture *>(PPCLocal::g_ppcContext->r3.u32);
 
-        if (params->format == PIXELFORMAT_LIN_L8)
+        auto guestTex = new GuestTexture;
+
+        auto d3dFormat = GetD3DFormat(params->format);
+
+        if (d3dFormat == 0)
         {
-            auto guestTex = new GuestTexture;
+            Log::Info("Texture_Initialize", "Invalid format -> ", (unsigned long)params->format, ", Texture -> ", texture->Identifier);
+        }
 
-            // make a d3d texture from the resource
-            HRESULT hr = g_video->m_d3dDevice->CreateTexture(params->width, params->height, params->mipLevels, D3DUSAGE_DYNAMIC, D3DFMT_L8, D3DPOOL_DEFAULT, &guestTex->texture, nullptr);
+        // Lock and Unlock are broken as of right now
+        if (d3dFormat != D3DFMT_L8)
+        {
+            return PPCLocal::g_ppcContext->r3.u32;
+        }
 
-            if (FAILED(hr))
-                Log::Error("Texture_Initialize", "Failed to create texture: ", params->width, ", ", params->height, ", ", params->mipLevels, ", ", params->format, " | Result -> ", hr);
+        D3DPOOL pool = D3DPOOL_DEFAULT;
+        DWORD usage = D3DUSAGE_DYNAMIC;
 
-            texture->Identifier.set(g_textureMap.size() + 1);
+        if (d3dFormat == D3DFMT_DXT1 || d3dFormat == D3DFMT_DXT4 || d3dFormat == D3DFMT_DXT5)
+        {
+            pool = D3DPOOL_MANAGED;
+            usage = 0;
+        }
 
-            g_textureMap[texture->Identifier] = guestTex;
+        // make a d3d texture from the resource
+        HRESULT hr = g_video->m_d3dDevice->CreateTexture(params->width, params->height, params->mipLevels, usage, d3dFormat, pool, &guestTex->texture, nullptr);
 
+        texture->Identifier.set(g_textureMap.size() + 1);
+
+        if (FAILED(hr))
+        {
+            Log::Error("Texture_Initialize", "Failed to create texture, all params -> ", params->width, ", ", params->height, ", ", params->mipLevels, ", Format -> ", d3dFormat, " Pool -> ", pool, " Usage -> ", usage, " Result -> ", (unsigned long)hr);
+        }
+        else
+        {
             Log::Info("Texture_Initialize", "Created texture -> ", params->width, ", ", params->height, ", ", params->mipLevels, ", ", params->format, " Key: ", texture->Identifier);
         }
+
+        g_textureMap[texture->Identifier] = guestTex;
 
         return PPCLocal::g_ppcContext->r3.u32;
     }
@@ -341,6 +334,12 @@ namespace VideoHooks
 
         D3DSURFACE_DESC desc;
         guestTex->texture->GetLevelDesc(mipLevel, &desc);
+
+        if (desc.Format == D3DFMT_DXT1 || desc.Format == D3DFMT_DXT3 || desc.Format == D3DFMT_DXT5)
+        {
+            Log::Error("D3D_LockSurface", "Trying to lock a compressed texture. ");
+            DebugBreak();
+        }
 
         UINT pitch = desc.Width;
         UINT height = desc.Height;
@@ -442,6 +441,34 @@ namespace VideoHooks
     void D3DDevice_KickOff()
     {
     }
+
+    PPC_FUNC_IMPL(__imp__sub_829EF3B8);
+    void AsyncOp_Open(
+        void *thisPtr,
+        const char *FilePath,
+        unsigned int modeflags,
+        void *doneCallback,
+        void *context,
+        volatile int priority)
+    {
+        Log::Info("AsyncOp_Open", "File Path -> ", FilePath);
+
+        __imp__sub_829EF3B8(*PPCLocal::g_ppcContext, Memory::g_base);
+    }
+
+    // This needs to be fixed, something is passing a null ptr into it, at destPtr.
+    PPC_FUNC_IMPL(__imp__sub_8236C5F8);
+    void RwMemCopy(uint32_t destPtr, uint32_t sourcePtr)
+    {
+        if (destPtr == 0 || sourcePtr == 0)
+        {
+            Log::Error("RwMemCopy", "INVALID MEM COPY: ", destPtr, ", ", sourcePtr);
+            return;
+        }
+
+        __imp__sub_8236C5F8(*PPCLocal::g_ppcContext, Memory::g_base);
+    }
+
 }
 
 GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
@@ -461,7 +488,6 @@ GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::D3D_UnlockResource)
 GUEST_FUNCTION_HOOK(sub_8235FCE0, VideoHooks::D3D_SetViewport)
 
 GUEST_FUNCTION_HOOK(sub_829FF6D0, VideoHooks::Texture_Initialize)
-GUEST_FUNCTION_HOOK(sub_825E5538, VideoHooks::Sk8_AddParam)
 
 // hacks
 GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)

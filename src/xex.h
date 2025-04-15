@@ -97,6 +97,16 @@ struct be
     }
 };
 
+struct Matrix4x4
+{
+    float m[4][4];
+};
+
+struct Matrix4x4Swap
+{
+    be<float> m[4][4];
+};
+
 template <typename T, typename U>
 void ConvertMatrix(const T &source, U &dest)
 {
@@ -113,6 +123,23 @@ void ConvertMatrix(const T &source, U &dest)
                 dest.m[i][j] = source.m[i][j];
             }
         }
+    }
+}
+
+template <typename SwapVertexType, typename HostVertexType>
+void ConvertVertices(
+    const SwapVertexType *swapVertices,
+    HostVertexType *hostVertices,
+    uint32_t vertexCount)
+{
+    for (uint32_t i = 0; i < vertexCount; i++)
+    {
+        hostVertices[i].x = swapVertices[i].x.get();
+        hostVertices[i].y = swapVertices[i].y.get();
+        hostVertices[i].z = swapVertices[i].z.get();
+        hostVertices[i].w = swapVertices[i].w.get();
+        hostVertices[i].u = swapVertices[i].u.get();
+        hostVertices[i].v = swapVertices[i].v.get();
     }
 }
 

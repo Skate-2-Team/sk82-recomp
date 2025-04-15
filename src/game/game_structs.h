@@ -46,10 +46,10 @@ namespace renderengine
 
     struct ProgramVariableHandle
     {
-        unsigned __int8 m_index;
-        unsigned __int8 m_dataType;
-        unsigned __int8 m_programType;
-        unsigned __int8 m_numConstants;
+        be<unsigned __int8> m_index;
+        be<unsigned __int8> m_dataType;
+        be<unsigned __int8> m_programType;
+        be<unsigned __int8> m_numConstants;
     };
 
     struct D3DResource
@@ -77,10 +77,11 @@ namespace renderengine
     {
     };
 
-    inline DWORD GetTextureBaseAddress(D3DBaseTexture *resource)
+    struct FloatShaderStateIterator
     {
-        return ByteSwap(resource->Format.dword[1]) & 0xFFFFFFF0;
-    }
+        be<uint32_t> m_dest;   // Matrix4x4
+        be<uint32_t> m_handle; // ProgramVariableHandle
+    };
 }
 
 namespace rw

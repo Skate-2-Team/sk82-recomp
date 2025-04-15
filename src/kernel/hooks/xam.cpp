@@ -16,6 +16,17 @@ namespace Hooks
         gListeners.erase(this);
     }
 
+    static void XamNotifyEnqueueEvent(uint32_t dwId, uint32_t dwParam)
+    {
+        for (const auto &listener : gListeners)
+        {
+            if (((1 << MSG_AREA(dwId)) & listener->areas) == 0)
+                continue;
+
+            listener->notifications.emplace_back(dwId, dwParam);
+        }
+    }
+
     void Import_XamContentCreateEx()
     {
         Log::Stub("XamContentCreateEx", "Called.");
@@ -77,9 +88,61 @@ namespace Hooks
         Log::Stub("XamShowMarketplaceUI", "Called.");
     }
 
-    void Import_XamShowDeviceSelectorUI()
+    bool Import_XNotifyGetNext(uint32_t hNotification, uint32_t dwMsgFilter, be<uint32_t> *pdwId, be<uint32_t> *pParam)
+    {
+        auto &listener = *GetKernelObject<XamListener>(hNotification);
+
+        if (dwMsgFilter)
+        {
+            for (size_t i = 0; i < listener.notifications.size(); i++)
+            {
+                if (std::get<0>(listener.notifications[i]) == dwMsgFilter)
+                {
+                    if (pdwId)
+                        *pdwId = std::get<0>(listener.notifications[i]);
+
+                    if (pParam)
+                        *pParam = std::get<1>(listener.notifications[i]);
+
+                    listener.notifications.erase(listener.notifications.begin() + i);
+
+                    return true;
+                }
+            }
+        }
+        else
+        {
+            if (listener.notifications.empty())
+                return false;
+
+            if (pdwId)
+                *pdwId = std::get<0>(listener.notifications[0]);
+
+            if (pParam)
+                *pParam = std::get<1>(listener.notifications[0]);
+
+            listener.notifications.erase(listener.notifications.begin());
+
+            return true;
+        }
+
+        return false;
+    }
+
+    uint32_t Import_XamShowDeviceSelectorUI(uint32_t userIndex,
+                                            uint32_t contentType,
+                                            uint32_t contentFlags,
+                                            uint64_t totalRequested,
+                                            be<uint32_t> *deviceId,
+                                            XXOVERLAPPED *overlapped)
     {
         Log::Info("XamShowDeviceSelectorUI", "HAS BEEN CALLED!");
+
+        XamNotifyEnqueueEvent(9, true);
+        *deviceId = 1;
+        XamNotifyEnqueueEvent(9, false);
+
+        return 997;
     }
 
     void Import_XamShowDirtyDiscErrorUI()
@@ -112,12 +175,12 @@ namespace Hooks
         Log::Stub("XamUserCreateStatsEnumerator", "Called.");
     }
 
-    DWORD Import_XamUserGetXUID(DWORD dwUserIndex, uint64_t *pXuid)
+    DWORD Import_XamUserGetXUID(DWORD dwUserIndex, be<uint64_t> *pXuid)
     {
         /*
         if (pXuid != nullptr)
         {
-            *pXuid = ByteSwap(gXUID);
+            *pXuid = gXUID;
         }*/
 
         return S_OK;
@@ -211,58 +274,6 @@ namespace Hooks
         listener->areas = qwAreas;
 
         return GetKernelHandle(listener);
-    }
-
-    void XamNotifyEnqueueEvent(uint32_t dwId, uint32_t dwParam)
-    {
-        for (const auto &listener : gListeners)
-        {
-            if (((1 << MSG_AREA(dwId)) & listener->areas) == 0)
-                continue;
-
-            listener->notifications.emplace_back(dwId, dwParam);
-        }
-    }
-
-    bool Import_XNotifyGetNext(uint32_t hNotification, uint32_t dwMsgFilter, be<uint32_t> *pdwId, be<uint32_t> *pParam)
-    {
-        auto &listener = *GetKernelObject<XamListener>(hNotification);
-
-        if (dwMsgFilter)
-        {
-            for (size_t i = 0; i < listener.notifications.size(); i++)
-            {
-                if (std::get<0>(listener.notifications[i]) == dwMsgFilter)
-                {
-                    if (pdwId)
-                        *pdwId = std::get<0>(listener.notifications[i]);
-
-                    if (pParam)
-                        *pParam = std::get<1>(listener.notifications[i]);
-
-                    listener.notifications.erase(listener.notifications.begin() + i);
-
-                    return true;
-                }
-            }
-        }
-        else
-        {
-            if (listener.notifications.empty())
-                return false;
-
-            if (pdwId)
-                *pdwId = std::get<0>(listener.notifications[0]);
-
-            if (pParam)
-                *pParam = std::get<1>(listener.notifications[0]);
-
-            listener.notifications.erase(listener.notifications.begin());
-
-            return true;
-        }
-
-        return false;
     }
 
     void Import_XMsgStartIORequest()

@@ -19,20 +19,16 @@
 
 namespace VideoHooks
 {
-    struct Matrix4x4
-    {
-        float m[4][4];
-    };
-
-    struct Matrix4x4Swap
-    {
-        be<float> m[4][4];
-    };
-
     struct TriangleVertex
     {
         float x, y, z, w;
         float u, v;
+    };
+
+    struct TriangleListVertexSwapped
+    {
+        be<float> x, y, z, w;
+        be<float> u, v;
     };
 
     struct QuadListVertex
@@ -242,6 +238,279 @@ namespace VideoHooks
         PIXELFORMAT_FORCEENUMSIZEINT = 0x7FFFFFFF,
     };
 
+    inline D3DFORMAT GetD3DFormat(PixelFormat format)
+    {
+        switch (format)
+        {
+        // Compressed formats
+        case PIXELFORMAT_DXT1:
+        case PIXELFORMAT_LIN_DXT1:
+            return D3DFMT_DXT1;
+        case PIXELFORMAT_DXT3:
+        case PIXELFORMAT_LIN_DXT3:
+            return D3DFMT_DXT3;
+        case PIXELFORMAT_DXT5:
+        case PIXELFORMAT_LIN_DXT5:
+            return D3DFMT_DXT5;
+        case PIXELFORMAT_DXN:
+        case PIXELFORMAT_LIN_DXN:
+            return D3DFMT_UNKNOWN;
+
+        // 8-bit luminance/alpha formats
+        case PIXELFORMAT_A8:
+        case PIXELFORMAT_LIN_A8:
+            return D3DFMT_A8;
+        case PIXELFORMAT_L8:
+        case PIXELFORMAT_LIN_L8:
+            return D3DFMT_L8;
+
+        // 16-bit color formats
+        case PIXELFORMAT_R5G6B5:
+        case PIXELFORMAT_LIN_R5G6B5:
+            return D3DFMT_R5G6B5;
+        case PIXELFORMAT_R6G5B5:
+        case PIXELFORMAT_LIN_R6G5B5:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_L6V5U5:
+        case PIXELFORMAT_LIN_L6V5U5:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_X1R5G5B5:
+        case PIXELFORMAT_LIN_X1R5G5B5:
+            return D3DFMT_X1R5G5B5;
+        case PIXELFORMAT_A1R5G5B5:
+        case PIXELFORMAT_LIN_A1R5G5B5:
+            return D3DFMT_A1R5G5B5;
+        case PIXELFORMAT_A4R4G4B4:
+        case PIXELFORMAT_LIN_A4R4G4B4:
+            return D3DFMT_A4R4G4B4;
+        case PIXELFORMAT_X4R4G4B4:
+        case PIXELFORMAT_LIN_X4R4G4B4:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_Q4W4V4U4:
+        case PIXELFORMAT_LIN_Q4W4V4U4:
+            return D3DFMT_UNKNOWN;
+
+        // 16-bit formats with luminance & alpha
+        case PIXELFORMAT_A8L8:
+        case PIXELFORMAT_LIN_A8L8:
+            return D3DFMT_A8L8;
+
+        // Some two-component formats
+        case PIXELFORMAT_G8R8:
+        case PIXELFORMAT_LIN_G8R8:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_V8U8:
+        case PIXELFORMAT_LIN_V8U8:
+            return D3DFMT_UNKNOWN;
+
+        // Depth formats
+        case PIXELFORMAT_D16:
+        case PIXELFORMAT_LIN_D16:
+            return D3DFMT_D16;
+
+        // 16-bit linear (nonstandard—return unknown)
+        case PIXELFORMAT_L16:
+        case PIXELFORMAT_LIN_L16:
+            return D3DFMT_UNKNOWN;
+
+        // Floating-point formats
+        case PIXELFORMAT_R16F:
+        case PIXELFORMAT_LIN_R16F:
+            return D3DFMT_R16F;
+        case PIXELFORMAT_R16F_EXPAND:
+        case PIXELFORMAT_LIN_R16F_EXPAND:
+            return D3DFMT_UNKNOWN;
+
+        // YUV variants and packed formats
+        case PIXELFORMAT_UYVY:
+        case PIXELFORMAT_LIN_UYVY:
+        case PIXELFORMAT_LE_UYVY:
+        case PIXELFORMAT_LE_LIN_UYVY:
+            return D3DFMT_UYVY;
+        case PIXELFORMAT_G8R8_G8B8:
+        case PIXELFORMAT_LIN_G8R8_G8B8:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_R8G8_B8G8:
+        case PIXELFORMAT_LIN_R8G8_B8G8:
+            return D3DFMT_R8G8_B8G8;
+        case PIXELFORMAT_YUY2:
+        case PIXELFORMAT_LIN_YUY2:
+        case PIXELFORMAT_LE_YUY2:
+        case PIXELFORMAT_LE_LIN_YUY2:
+            return D3DFMT_YUY2;
+
+        // 32-bit color formats
+        case PIXELFORMAT_A8R8G8B8:
+        case PIXELFORMAT_LIN_A8R8G8B8:
+            return D3DFMT_A8R8G8B8;
+        case PIXELFORMAT_X8R8G8B8:
+        case PIXELFORMAT_LIN_X8R8G8B8:
+            return D3DFMT_X8R8G8B8;
+        case PIXELFORMAT_A8B8G8R8:
+        case PIXELFORMAT_LIN_A8B8G8R8:
+            return D3DFMT_A8B8G8R8;
+        case PIXELFORMAT_X8B8G8R8:
+        case PIXELFORMAT_LIN_X8B8G8R8:
+            return D3DFMT_X8B8G8R8;
+
+        // Other 32-bit formats (nonstandard)
+        case PIXELFORMAT_X8L8V8U8:
+        case PIXELFORMAT_LIN_X8L8V8U8:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_Q8W8V8U8:
+        case PIXELFORMAT_LIN_Q8W8V8U8:
+            return D3DFMT_UNKNOWN;
+
+        // 10-/11-/10-bit and related formats
+        case PIXELFORMAT_A2R10G10B10:
+        case PIXELFORMAT_LIN_A2R10G10B10:
+            return D3DFMT_A2R10G10B10;
+        case PIXELFORMAT_X2R10G10B10:
+        case PIXELFORMAT_LIN_X2R10G10B10:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_A2B10G10R10:
+        case PIXELFORMAT_LIN_A2B10G10R10:
+            return D3DFMT_A2B10G10R10;
+        case PIXELFORMAT_A2W10V10U10:
+        case PIXELFORMAT_LIN_A2W10V10U10:
+            return D3DFMT_UNKNOWN;
+
+        // 32-bit luminance / alpha formats
+        case PIXELFORMAT_A16L16:
+        case PIXELFORMAT_LIN_A16L16:
+            return D3DFMT_UNKNOWN;
+
+        // 32-bit color formats with 16 bits per component
+        case PIXELFORMAT_G16R16:
+        case PIXELFORMAT_LIN_G16R16:
+            return D3DFMT_G16R16;
+        case PIXELFORMAT_V16U16:
+        case PIXELFORMAT_LIN_V16U16:
+            return D3DFMT_UNKNOWN;
+
+        // 10/11/10 packed formats
+        case PIXELFORMAT_R10G11B11:
+        case PIXELFORMAT_LIN_R10G11B11:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_R11G11B10:
+        case PIXELFORMAT_LIN_R11G11B10:
+            return D3DFMT_UNKNOWN;
+
+        // More exotic formats
+        case PIXELFORMAT_W10V11U11:
+        case PIXELFORMAT_LIN_W10V11U11:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_W11V11U10:
+        case PIXELFORMAT_LIN_W11V11U10:
+            return D3DFMT_UNKNOWN;
+
+        // Floating-point high-precision formats
+        case PIXELFORMAT_G16R16F:
+        case PIXELFORMAT_LIN_G16R16F:
+            return D3DFMT_G16R16F;
+        case PIXELFORMAT_G16R16F_EXPAND:
+        case PIXELFORMAT_LIN_G16R16F_EXPAND:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_L32:
+        case PIXELFORMAT_LIN_L32:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_R32F:
+        case PIXELFORMAT_LIN_R32F:
+            return D3DFMT_R32F;
+        case PIXELFORMAT_A16B16G16R16:
+        case PIXELFORMAT_LIN_A16B16G16R16:
+            return D3DFMT_A16B16G16R16;
+        case PIXELFORMAT_Q16W16V16U16:
+        case PIXELFORMAT_LIN_Q16W16V16U16:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_A16B16G16R16F:
+        case PIXELFORMAT_LIN_A16B16G16R16F:
+            return D3DFMT_A16B16G16R16F;
+        case PIXELFORMAT_A16B16G16R16F_EXPAND:
+        case PIXELFORMAT_LIN_A16B16G16R16F_EXPAND:
+            return D3DFMT_UNKNOWN;
+
+        // 64-bit formats
+        case PIXELFORMAT_A32L32:
+        case PIXELFORMAT_LIN_A32L32:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_G32R32:
+        case PIXELFORMAT_LIN_G32R32:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_V32U32:
+        case PIXELFORMAT_LIN_V32U32:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_G32R32F:
+        case PIXELFORMAT_LIN_G32R32F:
+            return D3DFMT_G32R32F;
+        case PIXELFORMAT_A32B32G32R32:
+        case PIXELFORMAT_LIN_A32B32G32R32:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_Q32W32V32U32:
+        case PIXELFORMAT_LIN_Q32W32V32U32:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_A32B32G32R32F:
+        case PIXELFORMAT_LIN_A32B32G32R32F:
+            return D3DFMT_UNKNOWN;
+
+        // EDRAM / platform‐specific formats
+        case PIXELFORMAT_A2B10G10R10F_EDRAM:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_G16R16_EDRAM:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_A16B16G16R16_EDRAM:
+            return D3DFMT_UNKNOWN;
+
+        // Little-endian specific cases
+        case PIXELFORMAT_LE_X8R8G8B8:
+            return D3DFMT_X8R8G8B8;
+        case PIXELFORMAT_LE_A8R8G8B8:
+            return D3DFMT_A8R8G8B8;
+        case PIXELFORMAT_LE_X2R10G10B10:
+            return D3DFMT_UNKNOWN;
+        case PIXELFORMAT_LE_A2R10G10B10:
+            return D3DFMT_A2R10G10B10;
+
+        // Special or unsupported types
+        case PIXELFORMAT_INDEX16:
+        case PIXELFORMAT_INDEX32:
+        case PIXELFORMAT_VERTEXDATA:
+        case PIXELFORMAT_NA:
+            return D3DFMT_UNKNOWN;
+
+        // Special variants of DXT formats
+        case PIXELFORMAT_DXT3A:
+        case PIXELFORMAT_LIN_DXT3A:
+            return D3DFMT_DXT3;
+        case PIXELFORMAT_DXT3A_1111:
+        case PIXELFORMAT_LIN_DXT3A_1111:
+            return D3DFMT_DXT3;
+        case PIXELFORMAT_DXT5A:
+        case PIXELFORMAT_LIN_DXT5A:
+            return D3DFMT_DXT5;
+        case PIXELFORMAT_CTX1:
+        case PIXELFORMAT_LIN_CTX1:
+            return D3DFMT_UNKNOWN;
+
+        // Depth/stencil surface formats
+        case PIXELFORMAT_D24S8:
+        case PIXELFORMAT_LIN_D24S8:
+            return D3DFMT_D24S8;
+        case PIXELFORMAT_D24X8:
+        case PIXELFORMAT_LIN_D24X8:
+            return D3DFMT_D24X8;
+        case PIXELFORMAT_D24FS8:
+        case PIXELFORMAT_LIN_D24FS8:
+            return D3DFMT_D24FS8;
+        case PIXELFORMAT_D32:
+        case PIXELFORMAT_LIN_D32:
+            return D3DFMT_D32;
+
+        default:
+            return D3DFMT_UNKNOWN;
+        }
+    }
+
     struct TextureParameters
     {
         be<renderengine::Type> type;
@@ -277,6 +546,7 @@ namespace VideoHooks
             BatchType_BeginVertices,
             BatchType_SetPixelShader,
             BatchType_SetViewPort,
+            BatchType_SetTexture,
             BatchType_Unknown,
         };
 
@@ -331,6 +601,30 @@ namespace VideoHooks
 
             void Process() override;
         };
+
+        struct SetTextureBatch : public BatchInfo
+        {
+            renderengine::D3DBaseTexture *baseTexture = nullptr;
+            uint32_t samplerID = 0;
+
+            SetTextureBatch() : BatchInfo(BatchType_Unknown) {};
+            ~SetTextureBatch() override = default;
+
+            void Process() override;
+        };
+
+        struct SetShaderConstantBatch : public BatchInfo
+        {
+            float *constData = 0;
+            uint32_t registerID = 0;
+            uint32_t vertexCount = 0;
+            bool isPixelShader = false;
+
+            SetShaderConstantBatch() : BatchInfo(BatchType_Unknown) {};
+            ~SetShaderConstantBatch() override = default;
+
+            void Process() override;
+        };
     }
 
     struct GuestTexture
@@ -340,8 +634,6 @@ namespace VideoHooks
         UINT pitch = 0;
         UINT height = 0;
     };
-
-    inline Matrix4x4Swap *g_matVP = nullptr;
 
     inline void *globalBuffer = nullptr;
     inline int lastSize = 0;
