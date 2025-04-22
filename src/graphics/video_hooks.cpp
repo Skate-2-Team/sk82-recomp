@@ -10,13 +10,7 @@ PPC_FUNC(MainLoopHook)
 
 namespace VideoHooks
 {
-    HRESULT Direct3D_CreateDevice(
-        unsigned int Adapter,
-        int DeviceType,
-        void *pUnused,
-        unsigned int BehaviorFlags,
-        void *pPresentationParameters,
-        void **ppReturnedDeviceInterface)
+    HRESULT Guest_CreateDevice(int, D3DDEVTYPE p_deviceType, int, uint32_t p_behaviourFlags, void *p_presentationParams, be<uint32_t> *p_returnedDevice)
     {
         Log::Info("VideoHooks", "Direct3D_CreateDevice has been called by game.");
 
@@ -29,10 +23,13 @@ namespace VideoHooks
             return E_FAIL;
         }
 
-        Shaders::PrecompileShaders();
+        if (!g_guestDevice)
+        {
+            g_guestDevice = g_heap->AllocPhysical<GuestDevice>();
+            *p_returnedDevice = Memory::MapVirtual(g_guestDevice);
+        }
 
-        // to stop crashing
-        *ppReturnedDeviceInterface = (void *)Memory::MapVirtual(g_heap->AllocPhysical(22272, 128));
+        Shaders::PrecompileShaders();
 
         return S_OK;
     }
@@ -91,7 +88,7 @@ namespace VideoHooks
             if (!Shaders::g_isShaderLoaded)
                 return;
 
-            if (primType == XD3DPT_QUADLIST && stride == 24)
+            if (primType == GuestD3D::PrimitiveType::XD3DPT_QUADLIST && stride == 24)
             {
                 g_video->m_d3dDevice->SetVertexShader(Shaders::g_pVertexShader);
 
@@ -107,7 +104,7 @@ namespace VideoHooks
                 g_video->m_d3dDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
                 g_video->m_d3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triangleVertexCount / 3, triangleVertices.data(), sizeof(TriangleVertex));
             }
-            else if (primType == XD3DPT_TRIANGLELIST && stride == 24)
+            else if (primType == GuestD3D::PrimitiveType::XD3DPT_TRIANGLELIST && stride == 24)
             {
                 auto swappedVertices = (TriangleListVertexSwapped *)(memory);
                 std::vector<TriangleVertex> hostVertices(vertexCount);
@@ -157,7 +154,7 @@ namespace VideoHooks
         }
     }
 
-    void D3DDevice_Swap()
+    void Guest_Swap()
     {
         g_video->m_d3dDevice->BeginScene();
 
@@ -176,93 +173,83 @@ namespace VideoHooks
         g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
     }
 
-    PPC_FUNC_IMPL(__imp__sub_829CF1F0);
-    BOOL VideoDecoder_Vp6_Decode(
-        uint8_t *thisPtr,
-        char *buffer,
-        unsigned int bufferSize,
-        int frameNumber,
-        void *videoRenderable)
-    {
-        Log::Info("VideoDecoder_Vp6_Decode", "Processing frame -> ", frameNumber);
-
-        __imp__sub_829CF1F0(*PPCLocal::g_ppcContext, Memory::g_base);
-
-        return PPCLocal::g_ppcContext->r3.u32;
-    }
-
-    uint32_t D3DDevice_BeginVertices(void *pDevice, uint32_t PrimitiveType, unsigned __int64 vertexCount, uint32_t stride)
+    uint32_t Guest_BeginVertices(GuestDevice *p_device, uint32_t p_primType, uint32_t p_vertexCount, uint32_t p_stride)
     {
         // Log::Info("BeginVertices", "PrimType -> ", PrimitiveType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
 
+        if (p_device->m_vertexDeclaration != 0)
+        {
+            auto vertexDecl = Memory::Translate<GuestVertexDeclaration *>(p_device->m_vertexDeclaration);
+            vertexDecl->PrintDeclaration();
+        }
+
         auto batchInfo = new Batches::BeginVerticesBatch();
 
-        batchInfo->size = stride * vertexCount;
+        batchInfo->size = p_stride * p_vertexCount;
         batchInfo->memory = g_heap->AllocPhysical(batchInfo->size, 128);
-        batchInfo->primType = PrimitiveType;
-        batchInfo->vertexCount = vertexCount;
-        batchInfo->stride = stride;
+        batchInfo->primType = p_primType;
+        batchInfo->vertexCount = p_vertexCount;
+        batchInfo->stride = p_stride;
 
         batchQueue.push(batchInfo);
 
         return Memory::MapVirtual(batchInfo->memory);
     }
 
-    HRESULT D3DDevice_BeginIndexedVertices(
-        void *pDevice,
-        XBOXPRIMITIVETYPE PrimitiveType,
-        unsigned __int64 NumVertices,
-        unsigned __int64 IndexDataFormat,
-        unsigned int VertexStreamZeroStride,
-        void **ppIndexData,
-        void **ppVertexData)
+    uint32_t Guest_BeginIndexedVertices(
+        GuestDevice *p_device,
+        GuestD3D::PrimitiveType p_primType,
+        uint64_t p_numVertices,
+        uint64_t p_indexDataFormat,
+        uint32_t p_vertexZeroStride,
+        be<uint32_t> *p_ppIndexData,
+        be<uint32_t> *p_ppVertexData)
     {
         return S_OK;
     }
 
-    void D3DDevice_DrawVertices(void *pDevice, XBOXPRIMITIVETYPE PrimitiveType, unsigned __int64 VertexCount, void *vertexData)
+    void Guest_DrawVertices(GuestDevice *p_device, GuestD3D::PrimitiveType p_primType, uint64_t p_vertexCount, void *p_vertexData)
     {
     }
 
-    void D3DDevice_DrawIndexedVertices(void *pDevice, XBOXPRIMITIVETYPE PrimitiveType, unsigned __int64 StartIndex, unsigned __int64 IndexCount)
+    void Guest_DrawIndexedVertices(GuestDevice *p_device, GuestD3D::PrimitiveType p_primType, uint64_t p_startIndex, uint64_t p_indexCount)
     {
     }
 
-    void D3DDevice_SetTexture(void *pDevice, unsigned int Sampler, renderengine::D3DBaseTexture *pTexture)
+    void Guest_SetTexture(GuestDevice *p_device, uint32_t p_sampler, renderengine::D3DBaseTexture *p_texture)
     {
         auto textureBatch = new Batches::SetTextureBatch();
 
-        textureBatch->baseTexture = pTexture;
-        textureBatch->samplerID = Sampler;
+        textureBatch->baseTexture = p_texture;
+        textureBatch->samplerID = p_sampler;
 
         batchQueue.push(textureBatch);
     }
 
-    // Properly implement these
-    void D3DDevice_Clear(
-        void *pDevice,
-        unsigned int Count,
-        const D3DRectSwapped *pRects,
-        unsigned int Flags,
-        void *Color,
-        double Z,
-        unsigned int Stencil)
+    void Guest_Clear(
+        GuestDevice *p_device,
+        uint32_t p_count,
+        const D3DRectSwapped *p_rects,
+        uint32_t p_flags,
+        uint32_t p_color,
+        double p_z,
+        uint32_t p_stencil)
     {
-        g_video->m_d3dDevice->Clear(Count, (_D3DRECT *)pRects, Flags, 0xFF000000, Z, Stencil);
+        // g_video->m_d3dDevice->Clear(Count, (_D3DRECT *)pRects, Flags, 0xFF000000, Z, Stencil);
     }
 
-    void D3DDevice_ClearF(
+    void Guest_ClearF(
         void *pDevice,
-        unsigned int Flags,
-        unsigned __int64 pColor,
-        double Z,
-        void *Stencil)
+        uint32_t p_flags,
+        void *p_color,
+        double p_z,
+        uint32_t p_stencil)
     {
-        g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
+        // g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
     }
 
     PPC_FUNC_IMPL(__imp__sub_829FF6D0);
-    uint32_t Texture_Initialize(rw::Resource *resource, const TextureParameters *params)
+    uint32_t Guest_InitTexture(rw::Resource *p_resource, const TextureParameters *p_params)
     {
         __imp__sub_829FF6D0(*PPCLocal::g_ppcContext, Memory::g_base);
 
@@ -270,11 +257,11 @@ namespace VideoHooks
 
         auto guestTex = new GuestTexture;
 
-        auto d3dFormat = GetD3DFormat(params->format);
+        auto d3dFormat = GetD3DFormat(p_params->format);
 
         if (d3dFormat == 0)
         {
-            Log::Info("Texture_Initialize", "Invalid format -> ", (unsigned long)params->format, ", Texture -> ", texture->Identifier);
+            Log::Info("Texture_Initialize", "Invalid format -> ", (unsigned long)p_params->format, ", Texture -> ", texture->Identifier);
         }
 
         // Lock and Unlock are broken as of right now
@@ -293,17 +280,17 @@ namespace VideoHooks
         }
 
         // make a d3d texture from the resource
-        HRESULT hr = g_video->m_d3dDevice->CreateTexture(params->width, params->height, params->mipLevels, usage, d3dFormat, pool, &guestTex->texture, nullptr);
+        HRESULT hr = g_video->m_d3dDevice->CreateTexture(p_params->width, p_params->height, p_params->mipLevels, usage, d3dFormat, pool, &guestTex->texture, nullptr);
 
         texture->Identifier.set(g_textureMap.size() + 1);
 
         if (FAILED(hr))
         {
-            Log::Error("Texture_Initialize", "Failed to create texture, all params -> ", params->width, ", ", params->height, ", ", params->mipLevels, ", Format -> ", d3dFormat, " Pool -> ", pool, " Usage -> ", usage, " Result -> ", (unsigned long)hr);
+            Log::Error("Texture_Initialize", "Failed to create texture, all params -> ", p_params->width, ", ", p_params->height, ", ", p_params->mipLevels, ", Format -> ", d3dFormat, " Pool -> ", pool, " Usage -> ", usage, " Result -> ", (unsigned long)hr);
         }
         else
         {
-            Log::Info("Texture_Initialize", "Created texture -> ", params->width, ", ", params->height, ", ", params->mipLevels, ", ", params->format, " Key: ", texture->Identifier);
+            Log::Info("Texture_Initialize", "Created texture -> ", p_params->width, ", ", p_params->height, ", ", p_params->mipLevels, ", ", p_params->format, " Key: ", texture->Identifier);
         }
 
         g_textureMap[texture->Identifier] = guestTex;
@@ -312,15 +299,15 @@ namespace VideoHooks
     }
 
     PPC_FUNC_IMPL(__imp__sub_823BF740);
-    void D3D_LockSurface(renderengine::Texture *pTexture) // arguments arent reliable on guest hook here
+    void Guest_LockSurface(renderengine::Texture *p_texture) // arguments arent reliable on guest hook here
     {
         uint64_t AsyncBlock = PPCLocal::g_ppcContext->r6.u64;
         uint32_t *Level = Memory::Translate<uint32_t *>(PPCLocal::g_ppcContext->r8.u32);
         uint32_t *Flags = Memory::Translate<uint32_t *>(PPCLocal::g_ppcContext->r9.u32);
 
         // check if the texture is in the map
-        auto it = g_textureMap.find(pTexture->Identifier);
-        if (it == g_textureMap.end() || pTexture->Identifier == 0)
+        auto it = g_textureMap.find(p_texture->Identifier);
+        if (it == g_textureMap.end() || p_texture->Identifier == 0)
         {
             __imp__sub_823BF740(*PPCLocal::g_ppcContext, Memory::g_base);
 
@@ -360,10 +347,10 @@ namespace VideoHooks
     }
 
     PPC_FUNC_IMPL(__imp__sub_82325F50);
-    void D3D_UnlockResource(renderengine::D3DResource *pResource)
+    void Guest_UnlockResource(renderengine::D3DResource *p_resource)
     {
-        auto it = g_textureMap.find(pResource->Identifier);
-        if (it == g_textureMap.end() || pResource->Identifier == 0)
+        auto it = g_textureMap.find(p_resource->Identifier);
+        if (it == g_textureMap.end() || p_resource->Identifier == 0)
         {
             __imp__sub_82325F50(*PPCLocal::g_ppcContext, Memory::g_base);
             return;
@@ -396,44 +383,42 @@ namespace VideoHooks
     }
 
     // This is stop mem leaks just for now
-    uint32_t D3D_LockResource(void *pResource,
-                              unsigned __int64 AsyncBlock,
-                              _D3DBLOCKTYPE BlockType,
-                              unsigned int Level,
-                              unsigned int pBase,
-                              unsigned int pMip,
-                              unsigned int pData,
-                              unsigned int Size,
-                              unsigned int Flags,
-                              unsigned int CoherStatus)
+    uint32_t Guest_LockResource(void *p_resource,
+                                uint64_t p_asyncBlock,
+                                DWORD p_blockType,
+                                uint32_t p_level,
+                                uint32_t p_base,
+                                uint32_t p_mip,
+                                uint32_t p_data,
+                                uint32_t p_size)
     {
-        if (lastSize < Size)
+        if (lastSize < p_size)
         {
             if (globalBuffer != nullptr)
             {
                 g_heap->Free(globalBuffer);
             }
 
-            globalBuffer = g_heap->AllocPhysical(Size, 128);
-            lastSize = Size;
+            globalBuffer = g_heap->AllocPhysical(p_size, 128);
+            lastSize = p_size;
         }
 
         return Memory::MapVirtual(globalBuffer);
     }
 
-    void D3D_SetViewport(
-        void *pDevice,
-        double X,
-        double Y,
-        double Width,
-        double Height,
-        double MinZ,
-        double MaxZ,
-        unsigned int Flags)
+    void Guest_SetViewport(
+        GuestDevice *p_device,
+        double p_x,
+        double p_y,
+        double p_width,
+        double p_height,
+        double p_minZ,
+        double p_maxZ,
+        uint32_t p_flags)
     {
         auto batchInfo = new Batches::SetViewPortBatch();
 
-        batchInfo->viewport = {DWORD(X), DWORD(Y), DWORD(Width), DWORD(Height), float(MinZ), float(MaxZ)};
+        batchInfo->viewport = {DWORD(p_x), DWORD(p_y), DWORD(p_width), DWORD(p_height), float(p_minZ), float(p_maxZ)};
 
         batchQueue.push(batchInfo);
     }
@@ -443,56 +428,62 @@ namespace VideoHooks
     }
 
     PPC_FUNC_IMPL(__imp__sub_829EF3B8);
-    void AsyncOp_Open(
-        void *thisPtr,
-        const char *FilePath,
-        unsigned int modeflags,
-        void *doneCallback,
-        void *context,
-        volatile int priority)
+    void Guest_AsyncOp_Open(void *, const char *p_filePath)
     {
-        Log::Info("AsyncOp_Open", "File Path -> ", FilePath);
+        Log::Info("AsyncOp_Open", "File Path -> ", p_filePath);
 
         __imp__sub_829EF3B8(*PPCLocal::g_ppcContext, Memory::g_base);
     }
 
     // This needs to be fixed, something is passing a null ptr into it, at destPtr.
     PPC_FUNC_IMPL(__imp__sub_8236C5F8);
-    void RwMemCopy(uint32_t destPtr, uint32_t sourcePtr)
+    void Guest_RwMemCopy(uint32_t p_destPtr, uint32_t p_sourcePtr)
     {
-        if (destPtr == 0 || sourcePtr == 0)
+        if (p_destPtr == 0 || p_sourcePtr == 0)
         {
-            Log::Error("RwMemCopy", "INVALID MEM COPY: ", destPtr, ", ", sourcePtr);
+            Log::Error("RwMemCopy", "INVALID MEM COPY: ", p_destPtr, ", ", p_sourcePtr);
             return;
         }
 
         __imp__sub_8236C5F8(*PPCLocal::g_ppcContext, Memory::g_base);
     }
 
+    PPC_FUNC_IMPL(__imp__sub_829CF1F0);
+    uint32_t Guest_VideoDecoder_Vp6_Decode(void *, char *, uint32_t, int p_frameNumber)
+    {
+        // Log::Info("VideoDecoder_Vp6_Decode", "Processing frame -> ", p_frameNumber);
+
+        __imp__sub_829CF1F0(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        return PPCLocal::g_ppcContext->r3.u32;
+    }
 }
 
-GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Direct3D_CreateDevice)
-GUEST_FUNCTION_HOOK(sub_823A7C98, VideoHooks::D3DDevice_Swap)
-GUEST_FUNCTION_HOOK(sub_82381BD0, VideoHooks::D3DDevice_Clear)
-GUEST_FUNCTION_HOOK(sub_82381AA8, VideoHooks::D3DDevice_ClearF)
-GUEST_FUNCTION_HOOK(sub_82352910, VideoHooks::D3DDevice_SetTexture)
+GUEST_FUNCTION_HOOK(sub_82A5D368, VideoHooks::Guest_CreateDevice)
+GUEST_FUNCTION_HOOK(sub_823A7C98, VideoHooks::Guest_Swap)
 
-GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::D3DDevice_BeginVertices)
-GUEST_FUNCTION_HOOK(sub_82A61218, VideoHooks::D3DDevice_BeginIndexedVertices)
-GUEST_FUNCTION_HOOK(sub_82363AC8, VideoHooks::D3DDevice_DrawVertices)
-GUEST_FUNCTION_HOOK(sub_82364240, VideoHooks::D3DDevice_DrawIndexedVertices)
+GUEST_FUNCTION_HOOK(sub_82381BD0, VideoHooks::Guest_Clear)
+GUEST_FUNCTION_HOOK(sub_82381AA8, VideoHooks::Guest_ClearF)
+GUEST_FUNCTION_HOOK(sub_8235FCE0, VideoHooks::Guest_SetViewport)
 
-GUEST_FUNCTION_HOOK(sub_823BF740, VideoHooks::D3D_LockSurface)
-GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::D3D_LockResource)
-GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::D3D_UnlockResource)
-GUEST_FUNCTION_HOOK(sub_8235FCE0, VideoHooks::D3D_SetViewport)
+// Drawing related functions
+GUEST_FUNCTION_HOOK(sub_823615A8, VideoHooks::Guest_BeginVertices)
+GUEST_FUNCTION_HOOK(sub_82363AC8, VideoHooks::Guest_DrawVertices)
 
-GUEST_FUNCTION_HOOK(sub_829FF6D0, VideoHooks::Texture_Initialize)
+GUEST_FUNCTION_HOOK(sub_82A61218, VideoHooks::Guest_BeginIndexedVertices)
+GUEST_FUNCTION_HOOK(sub_82364240, VideoHooks::Guest_DrawIndexedVertices)
 
-// hacks
-GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::RwMemCopy)
-GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::AsyncOp_Open)
-GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::VideoDecoder_Vp6_Decode)
+// Texture related functions
+GUEST_FUNCTION_HOOK(sub_82352910, VideoHooks::Guest_SetTexture)
+GUEST_FUNCTION_HOOK(sub_829FF6D0, VideoHooks::Guest_InitTexture)
+GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::Guest_LockResource)
+GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::Guest_UnlockResource)
+GUEST_FUNCTION_HOOK(sub_823BF740, VideoHooks::Guest_LockSurface)
+
+// Game specific hacks
+GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::Guest_RwMemCopy)
+GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::Guest_AsyncOp_Open)
+GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::Guest_VideoDecoder_Vp6_Decode)
 
 GUEST_FUNCTION_STUB(sub_8233F578) // D3DDevice_SetShaderGPRAllocation
 GUEST_FUNCTION_STUB(sub_8235FBE8) // D3DDevice_SetScissorRect

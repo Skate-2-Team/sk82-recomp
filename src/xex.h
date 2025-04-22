@@ -4,9 +4,51 @@
 #include <cstdint>
 #include <cassert>
 
+#define ALIGN(x) __declspec(align(x))
+#define PADDING(x, y) uint8_t m_pad##y[sizeof(uint8_t) * x]
+
+// The issue with the original byteswap, is that if the float is < 0, when it gets
+// casted to uint32_t for bswap, it just becomes 0.
+template <typename T>
+T ByteSwapFloat(T value)
+{
+    static_assert(std::is_floating_point<T>::value, "ByteSwapFloat only supports float or double.");
+
+    if constexpr (sizeof(T) == 4)
+    {
+        union
+        {
+            float f;
+            uint32_t i;
+        } u = {value};
+        u.i = __builtin_bswap32(u.i);
+        return u.f;
+    }
+    else if constexpr (sizeof(T) == 8)
+    {
+        union
+        {
+            double d;
+            uint64_t i;
+        } u = {value};
+        u.i = __builtin_bswap64(u.i);
+        return u.d;
+    }
+    else
+    {
+        static_assert(sizeof(T) == 4 || sizeof(T) == 8, "Unsupported float size.");
+        return value;
+    }
+}
+
 template <typename T>
 inline T ByteSwap(T value)
 {
+    if constexpr (std::is_floating_point<T>::value)
+    {
+        return ByteSwapFloat(value);
+    }
+
     if constexpr (sizeof(T) == 1)
         return value;
     else if constexpr (sizeof(T) == 2)

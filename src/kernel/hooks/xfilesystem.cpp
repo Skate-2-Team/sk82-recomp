@@ -7,7 +7,6 @@ https://github.com/hedge-dev/UnleashedRecomp/blob/main/UnleashedRecomp/kernel/io
 
 namespace Hooks
 {
-
     FileHandle *Hooks_CreateFileA(
         const char *lpFileName,
         uint32_t dwDesiredAccess,
