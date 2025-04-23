@@ -21,6 +21,10 @@ public:
 
     bool m_quit = false;
 
+    std::chrono::steady_clock::time_point m_lastTime;
+    uint32_t m_frameCount = 0;
+    float m_currentFps = 0.0f;
+
     Video();
 
     bool MakeWindow();
@@ -28,6 +32,32 @@ public:
 
     void SampleRenderFrame();
     void WindowLoop();
+
+    void InitFPSCounter();
+    void UpdateFPSCounter();
+
+    inline void PresentFrame()
+    {
+        HRESULT hr = m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
+
+        if (hr == D3DERR_DEVICELOST)
+        {
+            Log::Error("Video", "Device lost, trying to reset...");
+        }
+    }
+
+    inline void EventFlush()
+    {
+        SDL_Event e;
+
+        while (SDL_PollEvent(&e))
+        {
+            if (e.type == SDL_EVENT_QUIT)
+            {
+                m_quit = true;
+            }
+        }
+    }
 };
 
 inline std::shared_ptr<Video> g_video = nullptr;

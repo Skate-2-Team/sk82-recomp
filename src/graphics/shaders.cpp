@@ -92,34 +92,16 @@ namespace Shaders
 
     void D3DDevice_SetPixelShader(void *pDevice, uint32_t pShader)
     {
-        auto pixelShaderBatch = new VideoHooks::Batches::SetPixelShaderBatch();
+        g_curShaderKey = pShader;
 
-        pixelShaderBatch->shaderKey = pShader;
+        // check if the shader is in the map
+        auto it = g_pPixelShaders.find(pShader);
 
-        VideoHooks::batchQueue.push(pixelShaderBatch);
-    }
-
-    PPC_FUNC_IMPL(__imp__sub_8235B400);
-    void Device_BeginShaderStates(const renderengine::ProgramVariableHandle *stateHandle, renderengine::FloatShaderStateIterator *shaderStateIterator)
-    {
-        __imp__sub_8235B400(*PPCLocal::g_ppcContext, Memory::g_base);
-
-        // only float4s will be passed into this function
-        auto shaderConstantBatch = new VideoHooks::Batches::SetShaderConstantBatch();
-
-        // allocate a matrix on the heap
-        auto matrix = new Matrix4x4;
-        auto gameMatrix = Memory::Translate<Matrix4x4Swap *>(shaderStateIterator->m_dest);
-
-        // swap the matrix
-        ConvertMatrix(*gameMatrix, *matrix);
-
-        shaderConstantBatch->constData = (float *)matrix;
-        shaderConstantBatch->registerID = stateHandle->m_index.get();
-        shaderConstantBatch->vertexCount = 4;
-        shaderConstantBatch->isPixelShader = (stateHandle->m_programType.get() == renderengine::Type::TYPE_PIXEL);
-
-        VideoHooks::batchQueue.push(shaderConstantBatch);
+        if (it != g_pPixelShaders.end())
+        {
+            // Doesn't matter if shader is null, will only be 0 for that draw call.
+            g_video->m_d3dDevice->SetPixelShader(it->second);
+        }
     }
 
     PPC_FUNC_IMPL(__imp__sub_829FE9A0);
@@ -184,4 +166,3 @@ GUEST_FUNCTION_HOOK(sub_82365AE8, Shaders::D3DDevice_SetPixelShader)
 
 // Game Hooks
 GUEST_FUNCTION_HOOK(sub_829FE9A0, Shaders::ProgramBuffer_Initialize)
-GUEST_FUNCTION_HOOK(sub_8235B400, Shaders::Device_BeginShaderStates)

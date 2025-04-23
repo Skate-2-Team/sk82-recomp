@@ -47,25 +47,43 @@ bool Video::InitD3D()
     d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_ONE;
     d3dpp.hDeviceWindow = m_hwnd;
 
-    if (FAILED(m_d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, m_hwnd, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &d3dpp, &m_d3dDevice)))
+    if (FAILED(m_d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, m_hwnd, D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED, &d3dpp, &m_d3dDevice)))
     {
         Log::Error("Video", "Failed to create D3D device.");
         return false;
     }
 
+    InitFPSCounter();
+
     return true;
 }
 
-void Video::WindowLoop()
+void Video::InitFPSCounter()
 {
-    SDL_Event e;
+    m_lastTime = std::chrono::steady_clock::now();
+    m_frameCount = 0;
+}
 
-    while (SDL_PollEvent(&e))
+void Video::UpdateFPSCounter()
+{
+    ++m_frameCount;
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastTime).count();
+
+    if (elapsed >= 1000)
     {
-        if (e.type == SDL_EVENT_QUIT)
-        {
-            m_quit = true;
-        }
+        // compute FPS as frames per second
+        m_currentFps = static_cast<double>(m_frameCount) * 1000.0 / elapsed;
+
+        // update window title with FPS
+        std::string title = std::string(m_windowTitle) + " - FPS: " + std::to_string(static_cast<int>(m_currentFps));
+
+        // draw FPS on screen using d3d device
+        Log::Info("Video", "FPS: ", m_currentFps);
+
+        // reset
+        m_frameCount = 0;
+        m_lastTime = now;
     }
 }
 

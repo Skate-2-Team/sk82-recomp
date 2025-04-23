@@ -25,6 +25,8 @@ namespace Shaders
 
     inline IDirect3DVertexShader9 *g_pVertexShader = nullptr;
 
+    inline int g_curShaderKey = 0;
+
     inline std::map<uint32_t, IDirect3DPixelShader9 *> g_pPixelShaders;
     inline std::map<uint32_t, std::string> g_pPixelShaderNames;
 

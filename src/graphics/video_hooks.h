@@ -112,94 +112,31 @@ namespace VideoHooks
         }
     }
 
-    namespace Batches
+    struct PendingDraw
     {
-        // Batch Base
-        enum BatchType
+        GuestD3D::PrimitiveType m_type;
+        uint32_t m_vertexCount;
+        uint32_t m_stride;
+        uint32_t m_allocSize;
+        uint32_t m_primCount;
+        void *m_vertexBuffer;
+
+        PendingDraw() : m_type(GuestD3D::PrimitiveType::XD3DPT_FORCE_DWORD),
+                        m_vertexCount(0),
+                        m_stride(0),
+                        m_vertexBuffer(nullptr),
+                        m_allocSize(0),
+                        m_primCount(0) {};
+
+        ~PendingDraw()
         {
-            BatchType_BeginVertices,
-            BatchType_SetPixelShader,
-            BatchType_SetViewPort,
-            BatchType_SetTexture,
-            BatchType_Unknown,
-        };
-
-        struct BatchInfo
-        {
-            BatchType m_type;
-
-            BatchInfo(BatchType type) : m_type(type) {};
-            virtual ~BatchInfo() = default;
-
-            virtual void Process() = 0;
-        };
-
-        // Different types of Batches
-        struct BeginVerticesBatch : public BatchInfo
-        {
-            void *memory = nullptr;
-            size_t size = 0;
-            uint32_t primType = 0;
-            uint32_t vertexCount = 0;
-            uint32_t stride = 0;
-
-            BeginVerticesBatch() : BatchInfo(BatchType_BeginVertices) {};
-            ~BeginVerticesBatch() override
+            if (m_vertexBuffer != nullptr)
             {
-                if (memory != nullptr)
-                {
-                    g_heap->Free(memory);
-                    memory = nullptr;
-                }
-            };
-
-            void Process() override;
-        };
-
-        struct SetViewPortBatch : public BatchInfo
-        {
-            D3DVIEWPORT9 viewport{};
-
-            SetViewPortBatch() : BatchInfo(BatchType_SetViewPort) {};
-            ~SetViewPortBatch() override = default;
-
-            void Process() override;
-        };
-
-        struct SetPixelShaderBatch : public BatchInfo
-        {
-            uint32_t shaderKey = 0;
-
-            SetPixelShaderBatch() : BatchInfo(BatchType_SetPixelShader) {};
-            ~SetPixelShaderBatch() override = default;
-
-            void Process() override;
-        };
-
-        struct SetTextureBatch : public BatchInfo
-        {
-            renderengine::D3DBaseTexture *baseTexture = nullptr;
-            uint32_t samplerID = 0;
-
-            SetTextureBatch() : BatchInfo(BatchType_Unknown) {};
-            ~SetTextureBatch() override = default;
-
-            void Process() override;
-        };
-
-        struct SetShaderConstantBatch : public BatchInfo
-        {
-            float *constData = 0;
-            uint32_t registerID = 0;
-            uint32_t vertexCount = 0;
-            bool isPixelShader = false;
-
-            SetShaderConstantBatch() : BatchInfo(BatchType_Unknown) {};
-            ~SetShaderConstantBatch() override = default;
-
-            void Process() override;
-        };
-    }
+                g_heap->Free(m_vertexBuffer);
+                m_vertexBuffer = nullptr;
+            }
+        }
+    };
 
     struct GuestTexture
     {
@@ -211,9 +148,11 @@ namespace VideoHooks
 
     inline void *globalBuffer = nullptr;
     inline int lastSize = 0;
+    inline int g_curTextureKey = 0;
 
     inline std::atomic<GuestDevice *> g_guestDevice = nullptr;
 
     inline std::map<uint32_t, GuestTexture *> g_textureMap;
-    inline ThreadSafeQueue<Batches::BatchInfo *> batchQueue;
+    inline std::map<uint32_t, LPDIRECT3DVERTEXDECLARATION9> g_vertexDeclMap;
+    inline ThreadSafeQueue<PendingDraw *> g_pendingDrawQueue;
 }

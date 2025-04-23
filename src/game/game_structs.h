@@ -82,6 +82,17 @@ namespace renderengine
         be<uint32_t> m_dest;   // Matrix4x4
         be<uint32_t> m_handle; // ProgramVariableHandle
     };
+
+    struct VertexDescriptor
+    {
+        be<uint32_t> m_d3dVertexDeclaration;
+        be<uint32_t> m_typesFlags;
+        be<uint16_t> m_numElements;
+        short m_refCount;
+        be<uint16_t> m_instanceStreams;
+        be<uint16_t> m_pad0;
+    };
+
 }
 
 namespace rw

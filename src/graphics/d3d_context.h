@@ -698,10 +698,10 @@ namespace GuestD3D
         be<uint16_t> Stream;
         be<uint16_t> Offset;
         be<uint32_t> Type;
-        be<uint8_t> Method;
-        be<uint8_t> Usage;
-        be<uint8_t> UsageIndex;
-        be<uint8_t> Reserved;
+        uint8_t Method;
+        uint8_t Usage;
+        uint8_t UsageIndex;
+        uint8_t Reserved;
     };
 }
 
@@ -1459,6 +1459,204 @@ inline D3DPRIMITIVETYPE ConvertGuestPrimType(GuestD3D::PrimitiveType guestType)
         Log::Error("ConvertGuestPrimType", "Unknown primitive type: ", guestType);
         DebugBreak();
         return D3DPT_FORCE_DWORD;
+    }
+}
+
+inline std::string GetHostD3DDeclTypeName(uint32_t type)
+{
+    switch (type)
+    {
+    case D3DDECLTYPE_FLOAT1:
+        return "FLOAT1";
+    case D3DDECLTYPE_FLOAT2:
+        return "FLOAT2";
+    case D3DDECLTYPE_FLOAT3:
+        return "FLOAT3";
+    case D3DDECLTYPE_FLOAT4:
+        return "FLOAT4";
+    case D3DDECLTYPE_D3DCOLOR:
+        return "D3DCOLOR";
+    case D3DDECLTYPE_UBYTE4:
+        return "UBYTE4";
+    case D3DDECLTYPE_UBYTE4N:
+        return "UBYTE4N";
+    case D3DDECLTYPE_SHORT2:
+        return "SHORT2";
+    case D3DDECLTYPE_SHORT4:
+        return "SHORT4";
+    case D3DDECLTYPE_SHORT2N:
+        return "SHORT2N";
+    case D3DDECLTYPE_SHORT4N:
+        return "SHORT4N";
+    case D3DDECLTYPE_DEC3N:
+        return "DEC3N";
+    case D3DDECLTYPE_FLOAT16_2:
+        return "FLOAT16_2";
+    case D3DDECLTYPE_FLOAT16_4:
+        return "FLOAT16_4";
+    default:
+        Log::Error("GetHostD3DDeclTypeName", "Unknown type: ", type);
+        DebugBreak();
+        return "UNKNOWN_TYPE";
+    }
+}
+
+inline std::string GetHostD3DFormatName(D3DFORMAT p_format)
+{
+    switch (p_format)
+    {
+    case D3DFMT_UNKNOWN:
+        return "D3DFMT_UNKNOWN";
+
+    case D3DFMT_R8G8B8:
+        return "D3DFMT_R8G8B8";
+    case D3DFMT_A8R8G8B8:
+        return "D3DFMT_A8R8G8B8";
+    case D3DFMT_X8R8G8B8:
+        return "D3DFMT_X8R8G8B8";
+    case D3DFMT_R5G6B5:
+        return "D3DFMT_R5G6B5";
+    case D3DFMT_X1R5G5B5:
+        return "D3DFMT_X1R5G5B5";
+    case D3DFMT_A1R5G5B5:
+        return "D3DFMT_A1R5G5B5";
+    case D3DFMT_A4R4G4B4:
+        return "D3DFMT_A4R4G4B4";
+    case D3DFMT_R3G3B2:
+        return "D3DFMT_R3G3B2";
+    case D3DFMT_A8:
+        return "D3DFMT_A8";
+    case D3DFMT_A8R3G3B2:
+        return "D3DFMT_A8R3G3B2";
+    case D3DFMT_X4R4G4B4:
+        return "D3DFMT_X4R4G4B4";
+    case D3DFMT_A2B10G10R10:
+        return "D3DFMT_A2B10G10R10";
+    case D3DFMT_A8B8G8R8:
+        return "D3DFMT_A8B8G8R8";
+    case D3DFMT_X8B8G8R8:
+        return "D3DFMT_X8B8G8R8";
+    case D3DFMT_G16R16:
+        return "D3DFMT_G16R16";
+    case D3DFMT_A2R10G10B10:
+        return "D3DFMT_A2R10G10B10";
+    case D3DFMT_A16B16G16R16:
+        return "D3DFMT_A16B16G16R16";
+
+    case D3DFMT_A8P8:
+        return "D3DFMT_A8P8";
+    case D3DFMT_P8:
+        return "D3DFMT_P8";
+
+    case D3DFMT_L8:
+        return "D3DFMT_L8";
+    case D3DFMT_A8L8:
+        return "D3DFMT_A8L8";
+    case D3DFMT_A4L4:
+        return "D3DFMT_A4L4";
+
+    case D3DFMT_V8U8:
+        return "D3DFMT_V8U8";
+    case D3DFMT_L6V5U5:
+        return "D3DFMT_L6V5U5";
+    case D3DFMT_X8L8V8U8:
+        return "D3DFMT_X8L8V8U8";
+    case D3DFMT_Q8W8V8U8:
+        return "D3DFMT_Q8W8V8U8";
+    case D3DFMT_V16U16:
+        return "D3DFMT_V16U16";
+    case D3DFMT_A2W10V10U10:
+        return "D3DFMT_A2W10V10U10";
+
+    case D3DFMT_UYVY:
+        return "D3DFMT_UYVY";
+    case D3DFMT_R8G8_B8G8:
+        return "D3DFMT_R8G8_B8G8";
+    case D3DFMT_YUY2:
+        return "D3DFMT_YUY2";
+    case D3DFMT_G8R8_G8B8:
+        return "D3DFMT_G8R8_G8B8";
+    case D3DFMT_DXT1:
+        return "D3DFMT_DXT1";
+    case D3DFMT_DXT2:
+        return "D3DFMT_DXT2";
+    case D3DFMT_DXT3:
+        return "D3DFMT_DXT3";
+    case D3DFMT_DXT4:
+        return "D3DFMT_DXT4";
+    case D3DFMT_DXT5:
+        return "D3DFMT_DXT5";
+
+    case D3DFMT_D16_LOCKABLE:
+        return "D3DFMT_D16_LOCKABLE";
+    case D3DFMT_D32:
+        return "D3DFMT_D32";
+    case D3DFMT_D15S1:
+        return "D3DFMT_D15S1";
+    case D3DFMT_D24S8:
+        return "D3DFMT_D24S8";
+    case D3DFMT_D24X8:
+        return "D3DFMT_D24X8";
+    case D3DFMT_D24X4S4:
+        return "D3DFMT_D24X4S4";
+    case D3DFMT_D16:
+        return "D3DFMT_D16";
+
+    case D3DFMT_D32F_LOCKABLE:
+        return "D3DFMT_D32F_LOCKABLE";
+    case D3DFMT_D24FS8:
+        return "D3DFMT_D24FS8";
+
+    case D3DFMT_D32_LOCKABLE:
+        return "D3DFMT_D32_LOCKABLE";
+    case D3DFMT_S8_LOCKABLE:
+        return "D3DFMT_S8_LOCKABLE";
+
+    case D3DFMT_L16:
+        return "D3DFMT_L16";
+
+    case D3DFMT_VERTEXDATA:
+        return "D3DFMT_VERTEXDATA";
+    case D3DFMT_INDEX16:
+        return "D3DFMT_INDEX16";
+    case D3DFMT_INDEX32:
+        return "D3DFMT_INDEX32";
+
+    case D3DFMT_Q16W16V16U16:
+        return "D3DFMT_Q16W16V16U16";
+
+    case D3DFMT_MULTI2_ARGB8:
+        return "D3DFMT_MULTI2_ARGB8";
+
+    // Floating point surface formats
+    case D3DFMT_R16F:
+        return "D3DFMT_R16F";
+    case D3DFMT_G16R16F:
+        return "D3DFMT_G16R16F";
+    case D3DFMT_A16B16G16R16F:
+        return "D3DFMT_A16B16G16R16F";
+
+    case D3DFMT_R32F:
+        return "D3DFMT_R32F";
+    case D3DFMT_G32R32F:
+        return "D3DFMT_G32R32F";
+    case D3DFMT_A32B32G32R32F:
+        return "D3DFMT_A32B32G32R32F";
+
+    case D3DFMT_CxV8U8:
+        return "D3DFMT_CxV8U8";
+
+    case D3DFMT_A1:
+        return "D3DFMT_A1";
+    case D3DFMT_A2B10G10R10_XR_BIAS:
+        return "D3DFMT_A2B10G10R10_XR_BIAS";
+    case D3DFMT_BINARYBUFFER:
+        return "D3DFMT_BINARYBUFFER";
+
+    default:
+        Log::Error("GetHostD3DFormatName", "Unknown format: ", p_format);
+        DebugBreak();
+        return "UNKNOWN_FORMAT";
     }
 }
 

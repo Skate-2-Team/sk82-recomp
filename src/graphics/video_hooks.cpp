@@ -3,13 +3,66 @@
 PPC_FUNC(MainLoopHook)
 {
     // We need this hook because the SDL polling won't work if its not on main thread.
-    g_video->WindowLoop();
+    g_video->EventFlush();
 
     return;
 }
 
 namespace VideoHooks
 {
+    static void PrintCurrentVertexDecl(bool printFromHostDevice)
+    {
+        LPDIRECT3DVERTEXDECLARATION9 decl9 = nullptr;
+
+        if (printFromHostDevice)
+        {
+            g_video->m_d3dDevice->GetVertexDeclaration(&decl9);
+        }
+        else
+        {
+            // 1) grab the guest’s current decl ID
+            uint32_t id = g_guestDevice.load()->m_vertexDeclaration.get();
+
+            // 2) look it up in our cache
+            auto it = g_vertexDeclMap.find(id);
+            if (it == g_vertexDeclMap.end())
+            {
+                Log::Info("VideoHooks", "No vertex declaration cached for ID ", id);
+                return;
+            }
+
+            decl9 = it->second;
+        }
+
+        D3DVERTEXELEMENT9 elems[32];
+        UINT elemCount = _countof(elems);
+
+        HRESULT hr = decl9->GetDeclaration(elems, &elemCount);
+        if (FAILED(hr))
+        {
+            Log::Error("VideoHooks", "GetDeclaration failed: ", hr);
+            return;
+        }
+
+        Log::Info("PrintCurrentVertexDecl", "-------------------------------");
+
+        for (UINT i = 0; i < elemCount; ++i)
+        {
+            const auto &e = elems[i];
+            // Stream == 0xFF
+            if (e.Stream == 0xFF)
+                break;
+
+            Log::Info("VideoHooks",
+                      "Elem[", i, "]: Stream=", e.Stream,
+                      ", Offset=", e.Offset,
+                      ", Type=", GetHostD3DDeclTypeName(e.Type),
+                      ", Method=", GuestD3D::GetDeclMethodName(e.Method),
+                      ", Usage=", GuestD3D::GetDeclUsageName(e.Usage),
+                      ", UsageIdx=", (int)e.UsageIndex);
+        }
+    }
+
     HRESULT Guest_CreateDevice(int, D3DDEVTYPE p_deviceType, int, uint32_t p_behaviourFlags, void *p_presentationParams, be<uint32_t> *p_returnedDevice)
     {
         Log::Info("VideoHooks", "Direct3D_CreateDevice has been called by game.");
@@ -34,166 +87,244 @@ namespace VideoHooks
         return S_OK;
     }
 
-    void ConvertQuadListToTriangleList(const QuadListVertex *quadVertices, TriangleVertex *triangleVertices, uint32_t quadCount)
+    void PrepareVertexData(void *p_vertexBuffer, int size, int alignment)
     {
-        // XD3DPT_QUADLIST doesn't exist on PC dx9, so we must split the quads into 2 triangles manually.
-
-        for (uint32_t i = 0; i < quadCount; i++)
+        // copy data over in chunks of 4 bytes and bswap
+        for (int i = 0; i < size; i += 4)
         {
-            const QuadListVertex &v0 = quadVertices[i * 4 + 0];
-            const QuadListVertex &v1 = quadVertices[i * 4 + 1];
-            const QuadListVertex &v2 = quadVertices[i * 4 + 2];
-            const QuadListVertex &v3 = quadVertices[i * 4 + 3];
-
-            // First triangle (v0, v1, v2)
-            uint32_t baseIdx = i * 6;
-            triangleVertices[baseIdx + 0] = {
-                v0.x, v0.y, v0.z, v0.w,
-                v0.u, v0.v};
-
-            triangleVertices[baseIdx + 1] = {
-                v1.x, v1.y, v1.z, v1.w,
-                v1.u, v1.v};
-
-            triangleVertices[baseIdx + 2] = {
-                v2.x, v2.y, v2.z, v2.w,
-                v2.u, v2.v};
-
-            // Second triangle (v0, v2, v3)
-            triangleVertices[baseIdx + 3] = {
-                v0.x, v0.y, v0.z, v0.w,
-                v0.u, v0.v};
-
-            triangleVertices[baseIdx + 4] = {
-                v2.x, v2.y, v2.z, v2.w,
-                v2.u, v2.v};
-
-            triangleVertices[baseIdx + 5] = {
-                v3.x, v3.y, v3.z, v3.w,
-                v3.u, v3.v};
+            uint32_t *src = (uint32_t *)((uint8_t *)p_vertexBuffer + i);
+            ByteSwapInplace(*src);
         }
     }
 
-    namespace Batches
+    void *PrepareQuadData(void *p_vertexBuffer, int quadCount, int stride, int allocSize)
     {
-        inline uint32_t curPixelShader = 0;
+        PrepareVertexData(p_vertexBuffer, allocSize, 16);
 
-        void SetViewPortBatch::Process()
+        int triangleVertexCount = quadCount * 6; // Each quad becomes 2 triangles (6 vertices)
+
+        void *triangleBuffer = g_heap->AllocPhysical(triangleVertexCount * stride, 16);
+
+        // For each quad, create two triangles
+        for (int i = 0; i < quadCount; i++)
         {
-            g_video->m_d3dDevice->SetViewport(&viewport);
+            uint8_t *srcQuad = static_cast<uint8_t *>(p_vertexBuffer) + (i * 4 * stride);
+            uint8_t *dstTri = static_cast<uint8_t *>(triangleBuffer) + (i * 6 * stride);
+
+            // Quad vertices: A, B, C, D (in counter-clockwise order)
+            // Triangle 1: A, B, D
+            // Triangle 2: B, C, D
+
+            // First triangle (A, B, D)
+            memcpy(dstTri, srcQuad, stride);                           // A
+            memcpy(dstTri + stride, srcQuad + stride, stride);         // B
+            memcpy(dstTri + 2 * stride, srcQuad + 3 * stride, stride); // D
+
+            // Second triangle (B, C, D)
+            memcpy(dstTri + 3 * stride, srcQuad + stride, stride);     // B
+            memcpy(dstTri + 4 * stride, srcQuad + 2 * stride, stride); // C
+            memcpy(dstTri + 5 * stride, srcQuad + 3 * stride, stride); // D
         }
 
-        void BeginVerticesBatch::Process()
+        return triangleBuffer;
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_82A62FA8);
+    void Guest_XGSetVertexDeclaration(const GuestD3D::VertexElement *p_vertexElements, uint32_t p_vertexDeclaration)
+    {
+        __imp__sub_82A62FA8(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        // if we've already created this declaration, skip
+        auto it = g_vertexDeclMap.find(p_vertexDeclaration);
+        if (it != g_vertexDeclMap.end())
         {
-            if (!Shaders::g_isShaderLoaded)
-                return;
-
-            if (primType == GuestD3D::PrimitiveType::XD3DPT_QUADLIST && stride == 24)
-            {
-                g_video->m_d3dDevice->SetVertexShader(Shaders::g_pVertexShader);
-
-                uint32_t quadCount = vertexCount / 4;
-                uint32_t triangleVertexCount = quadCount * 6;
-
-                // print all of the quad list vertices
-                const QuadListVertex *quadVertices = (QuadListVertex *)memory;
-                std::vector<TriangleVertex> triangleVertices(triangleVertexCount);
-
-                ConvertQuadListToTriangleList(quadVertices, triangleVertices.data(), quadCount);
-
-                g_video->m_d3dDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
-                g_video->m_d3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, triangleVertexCount / 3, triangleVertices.data(), sizeof(TriangleVertex));
-            }
-            else if (primType == GuestD3D::PrimitiveType::XD3DPT_TRIANGLELIST && stride == 24)
-            {
-                auto swappedVertices = (TriangleListVertexSwapped *)(memory);
-                std::vector<TriangleVertex> hostVertices(vertexCount);
-
-                ConvertVertices(swappedVertices, hostVertices.data(), vertexCount);
-
-                g_video->m_d3dDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
-                g_video->m_d3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, vertexCount / 3, hostVertices.data(), sizeof(TriangleVertex));
-
-                // Log::Info("TriangleList", "Requesting shader -> ", Shaders::g_pPixelShaderNames[curShader]);
-            }
-            else
-            {
-                // Log::Info("BeginVertices", "PrimType -> ", primType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
-            }
+            // This shouldn't really happen
+            Log::Info("VideoHooks", "Vertex declaration already exists: ", p_vertexDeclaration, " Map Size -> ", g_vertexDeclMap.size());
+            DebugBreak();
+            return;
         }
 
-        void SetPixelShaderBatch::Process()
+        // build D3D9 declaration
+        std::vector<D3DVERTEXELEMENT9> d3dDecl;
+
+        for (int i = 0;; ++i)
         {
-            curPixelShader = shaderKey;
+            const auto &src = p_vertexElements[i];
 
-            // check if the shader is in the map
-            auto it = Shaders::g_pPixelShaders.find(shaderKey);
+            // D3DDECL_END() has Stream == 0xFF
+            if (src.Stream == 0xFF)
+                break;
 
-            if (it != Shaders::g_pPixelShaders.end())
-            {
-                // Doesn't matter if shader is null, will only be 0 for that draw call.
-                g_video->m_d3dDevice->SetPixelShader(it->second);
-            }
+            D3DVERTEXELEMENT9 elem;
+            elem.Stream = src.Stream.get();
+            elem.Offset = src.Offset.get();
+            elem.Type = ConvertGuestDeclType(src.Type.get());
+            elem.Method = src.Method;
+            elem.Usage = src.Usage;
+            elem.UsageIndex = src.UsageIndex;
+
+            d3dDecl.push_back(elem);
         }
 
-        void SetTextureBatch::Process()
-        {
-            // check if text is in map
-            auto it = g_textureMap.find(baseTexture->Identifier);
+        d3dDecl.push_back(D3DDECL_END());
 
-            if (it != g_textureMap.end())
-                g_video->m_d3dDevice->SetTexture(samplerID, it->second->texture);
+        LPDIRECT3DVERTEXDECLARATION9 d3dDeclPtr = nullptr;
+        HRESULT hr = g_video->m_d3dDevice->CreateVertexDeclaration(d3dDecl.data(), &d3dDeclPtr);
+
+        if (FAILED(hr))
+        {
+            Log::Error("VideoHooks", "Failed to create vertex declaration: ", hr);
+            DebugBreak();
+            return;
         }
 
-        void SetShaderConstantBatch::Process()
+        // Store the declaration in the map
+        g_vertexDeclMap[p_vertexDeclaration] = d3dDeclPtr;
+
+        Log::Info("XGSetVertexDeclaration", "Created vertex declaration: ", p_vertexDeclaration, " Map Size -> ", g_vertexDeclMap.size());
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_8239C798);
+    void Guest_Sk8VertexProgramStateFactory_GetVertexProgramState(void *p_this, renderengine::VertexDescriptor *p_vd)
+    {
+        __imp__sub_8239C798(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        // Figure out what vertex decl its asking for
+        auto it = g_vertexDeclMap.find(p_vd->m_d3dVertexDeclaration.get());
+
+        if (it == g_vertexDeclMap.end())
         {
-            if (isPixelShader)
-                g_video->m_d3dDevice->SetPixelShaderConstantF(registerID, constData, vertexCount);
-            else
-                g_video->m_d3dDevice->SetVertexShaderConstantF(registerID, constData, vertexCount);
+            Log::Error("VideoHooks", "Vertex declaration not found: ", p_vd->m_d3dVertexDeclaration.get());
+            DebugBreak();
+            return;
         }
+
+        LPDIRECT3DVERTEXDECLARATION9 d3dDecl = it->second;
+        // Set the vertex declaration on the device
+        HRESULT hr = g_video->m_d3dDevice->SetVertexDeclaration(d3dDecl);
+
+        if (FAILED(hr))
+        {
+            Log::Error("VideoHooks", "Failed to set vertex declaration: ", hr);
+            DebugBreak();
+            return;
+        }
+
+        // set it on the device
+        g_guestDevice.load()->m_vertexDeclaration = p_vd->m_d3dVertexDeclaration.get();
     }
 
     void Guest_Swap()
     {
-        g_video->m_d3dDevice->BeginScene();
-
-        while (!batchQueue.empty())
-        {
-            auto currentBatch = batchQueue.front();
-            batchQueue.pop();
-
-            currentBatch->Process();
-
-            delete currentBatch;
-        }
-
-        g_video->m_d3dDevice->EndScene();
-
-        g_video->m_d3dDevice->Present(nullptr, nullptr, nullptr, nullptr);
+        g_video->PresentFrame();
+        g_video->UpdateFPSCounter();
     }
 
-    uint32_t Guest_BeginVertices(GuestDevice *p_device, uint32_t p_primType, uint32_t p_vertexCount, uint32_t p_stride)
+    uint32_t Guest_BeginVertices(GuestDevice *p_device, GuestD3D::PrimitiveType p_primType, uint32_t p_vertexCount, uint32_t p_stride)
     {
-        // Log::Info("BeginVertices", "PrimType -> ", PrimitiveType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
+        auto pendingDraw = new PendingDraw();
 
-        if (p_device->m_vertexDeclaration != 0)
+        pendingDraw->m_type = p_primType;
+        pendingDraw->m_vertexCount = p_vertexCount;
+        pendingDraw->m_stride = p_stride;
+        pendingDraw->m_allocSize = p_vertexCount * p_stride;
+        pendingDraw->m_primCount = GetPrimitiveCount(p_vertexCount, p_primType);
+        pendingDraw->m_vertexBuffer = g_heap->AllocPhysical(pendingDraw->m_allocSize, 16);
+
+        g_pendingDrawQueue.push(pendingDraw);
+
+        return Memory::MapVirtual(pendingDraw->m_vertexBuffer);
+    }
+
+    static void EndVertices()
+    {
+        while (!g_pendingDrawQueue.empty())
         {
-            auto vertexDecl = Memory::Translate<GuestVertexDeclaration *>(p_device->m_vertexDeclaration);
-            vertexDecl->PrintDeclaration();
+            auto pendingDraw = g_pendingDrawQueue.front();
+            g_pendingDrawQueue.pop();
+
+            if (pendingDraw)
+            {
+                g_video->m_d3dDevice->BeginScene();
+
+                // Log::Info("BeginVertices", "PrimType -> ", PrimitiveType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
+
+                if (pendingDraw->m_type == GuestD3D::PrimitiveType::XD3DPT_QUADLIST)
+                {
+                    int trianglePrimCount = (pendingDraw->m_primCount * 6) / 3;
+
+                    if (Shaders::g_pVertexShader)
+                        g_video->m_d3dDevice->SetVertexShader(Shaders::g_pVertexShader);
+
+                    auto quadPreparedData = PrepareQuadData(pendingDraw->m_vertexBuffer, pendingDraw->m_primCount, pendingDraw->m_stride, pendingDraw->m_allocSize);
+
+                    // PrintCurrentVertexDecl(true);
+
+                    // copy first 8 registers from guest to host (debug)
+                    for (int i = 0; i < 8; i++)
+                    {
+                        // current register
+                        float curRegister[4] =
+                            {
+                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].x),
+                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].y),
+                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].z),
+                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].w),
+                            };
+
+                        g_video->m_d3dDevice->SetVertexShaderConstantF(i, curRegister, 1);
+                    }
+
+                    // print current shader
+                    Log::Info("EndVertices", "Requesting shader -> ", Shaders::g_pPixelShaderNames[Shaders::g_curShaderKey]);
+
+                    g_video->m_d3dDevice->DrawPrimitiveUP(ConvertGuestPrimType(pendingDraw->m_type), trianglePrimCount, quadPreparedData, pendingDraw->m_stride);
+                    g_heap->Free(quadPreparedData);
+                }
+                else
+                {
+                    PrepareVertexData(pendingDraw->m_vertexBuffer, pendingDraw->m_allocSize, 16);
+                    g_video->m_d3dDevice->DrawPrimitiveUP(ConvertGuestPrimType(pendingDraw->m_type), pendingDraw->m_primCount, pendingDraw->m_vertexBuffer, pendingDraw->m_stride);
+                }
+
+                g_video->m_d3dDevice->EndScene();
+
+                // only delete if it wasent null
+                delete pendingDraw;
+            }
         }
+    }
 
-        auto batchInfo = new Batches::BeginVerticesBatch();
+    PPC_FUNC_IMPL(__imp__sub_82366560);
+    void Guest_SimpleDraw_Draw()
+    {
+        __imp__sub_82366560(*PPCLocal::g_ppcContext, Memory::g_base);
 
-        batchInfo->size = p_stride * p_vertexCount;
-        batchInfo->memory = g_heap->AllocPhysical(batchInfo->size, 128);
-        batchInfo->primType = p_primType;
-        batchInfo->vertexCount = p_vertexCount;
-        batchInfo->stride = p_stride;
+        EndVertices();
+    }
 
-        batchQueue.push(batchInfo);
+    PPC_FUNC_IMPL(__imp__sub_8239C4C0);
+    void Guest_SimpleDraw_Draw_TriListTextured_Fasttrack()
+    {
+        __imp__sub_8239C4C0(*PPCLocal::g_ppcContext, Memory::g_base);
 
-        return Memory::MapVirtual(batchInfo->memory);
+        EndVertices();
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_826A8A98);
+    void Guest_DrawstringLocal_Char()
+    {
+        __imp__sub_826A8A98(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        EndVertices();
+    }
+
+    PPC_FUNC_IMPL(__imp__sub_826A8E10);
+    void Guest_DrawstringLocal_UShort()
+    {
+        __imp__sub_826A8E10(*PPCLocal::g_ppcContext, Memory::g_base);
+
+        EndVertices();
     }
 
     uint32_t Guest_BeginIndexedVertices(
@@ -218,12 +349,14 @@ namespace VideoHooks
 
     void Guest_SetTexture(GuestDevice *p_device, uint32_t p_sampler, renderengine::D3DBaseTexture *p_texture)
     {
-        auto textureBatch = new Batches::SetTextureBatch();
+        auto it = g_textureMap.find(p_texture->Identifier);
 
-        textureBatch->baseTexture = p_texture;
-        textureBatch->samplerID = p_sampler;
+        if (it != g_textureMap.end())
+        {
+            g_curTextureKey = p_texture->Identifier.get();
 
-        batchQueue.push(textureBatch);
+            g_video->m_d3dDevice->SetTexture(p_sampler, it->second->texture);
+        }
     }
 
     void Guest_Clear(
@@ -249,7 +382,7 @@ namespace VideoHooks
     }
 
     PPC_FUNC_IMPL(__imp__sub_829FF6D0);
-    uint32_t Guest_InitTexture(rw::Resource *p_resource, const TextureParameters *p_params)
+    void Guest_InitTexture(rw::Resource *p_resource, const TextureParameters *p_params)
     {
         __imp__sub_829FF6D0(*PPCLocal::g_ppcContext, Memory::g_base);
 
@@ -266,9 +399,7 @@ namespace VideoHooks
 
         // Lock and Unlock are broken as of right now
         if (d3dFormat != D3DFMT_L8)
-        {
-            return PPCLocal::g_ppcContext->r3.u32;
-        }
+            return;
 
         D3DPOOL pool = D3DPOOL_DEFAULT;
         DWORD usage = D3DUSAGE_DYNAMIC;
@@ -294,8 +425,6 @@ namespace VideoHooks
         }
 
         g_textureMap[texture->Identifier] = guestTex;
-
-        return PPCLocal::g_ppcContext->r3.u32;
     }
 
     PPC_FUNC_IMPL(__imp__sub_823BF740);
@@ -416,11 +545,9 @@ namespace VideoHooks
         double p_maxZ,
         uint32_t p_flags)
     {
-        auto batchInfo = new Batches::SetViewPortBatch();
+        const D3DVIEWPORT9 viewport = {DWORD(p_x), DWORD(p_y), DWORD(p_width), DWORD(p_height), float(p_minZ), float(p_maxZ)};
 
-        batchInfo->viewport = {DWORD(p_x), DWORD(p_y), DWORD(p_width), DWORD(p_height), float(p_minZ), float(p_maxZ)};
-
-        batchQueue.push(batchInfo);
+        g_video->m_d3dDevice->SetViewport(&viewport);
     }
 
     void D3DDevice_KickOff()
@@ -472,6 +599,8 @@ GUEST_FUNCTION_HOOK(sub_82363AC8, VideoHooks::Guest_DrawVertices)
 
 GUEST_FUNCTION_HOOK(sub_82A61218, VideoHooks::Guest_BeginIndexedVertices)
 GUEST_FUNCTION_HOOK(sub_82364240, VideoHooks::Guest_DrawIndexedVertices)
+GUEST_FUNCTION_HOOK(sub_82A62FA8, VideoHooks::Guest_XGSetVertexDeclaration)
+GUEST_FUNCTION_HOOK(sub_8239C798, VideoHooks::Guest_Sk8VertexProgramStateFactory_GetVertexProgramState)
 
 // Texture related functions
 GUEST_FUNCTION_HOOK(sub_82352910, VideoHooks::Guest_SetTexture)
@@ -484,6 +613,11 @@ GUEST_FUNCTION_HOOK(sub_823BF740, VideoHooks::Guest_LockSurface)
 GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::Guest_RwMemCopy)
 GUEST_FUNCTION_HOOK(sub_829EF3B8, VideoHooks::Guest_AsyncOp_Open)
 GUEST_FUNCTION_HOOK(sub_829CF1F0, VideoHooks::Guest_VideoDecoder_Vp6_Decode)
+
+GUEST_FUNCTION_HOOK(sub_82366560, VideoHooks::Guest_SimpleDraw_Draw)
+GUEST_FUNCTION_HOOK(sub_8239C4C0, VideoHooks::Guest_SimpleDraw_Draw_TriListTextured_Fasttrack)
+GUEST_FUNCTION_HOOK(sub_826A8A98, VideoHooks::Guest_DrawstringLocal_Char)
+GUEST_FUNCTION_HOOK(sub_826A8E10, VideoHooks::Guest_DrawstringLocal_UShort)
 
 GUEST_FUNCTION_STUB(sub_8233F578) // D3DDevice_SetShaderGPRAllocation
 GUEST_FUNCTION_STUB(sub_8235FBE8) // D3DDevice_SetScissorRect
