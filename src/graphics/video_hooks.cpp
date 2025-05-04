@@ -1,3 +1,5 @@
+#define NOMINMAX
+
 #include "video_hooks.h"
 
 PPC_FUNC(MainLoopHook)
@@ -249,6 +251,32 @@ namespace VideoHooks
 
                 // Log::Info("BeginVertices", "PrimType -> ", PrimitiveType, ", Vertex Count -> ", vertexCount, ", Stride -> ", stride);
 
+                // copy first 8 registers from guest to host (debug)
+                for (int i = 0; i < 8; i++)
+                {
+                    // current register
+                    float curRegisterVS[4] =
+                        {
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].x),
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].y),
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].z),
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].w),
+                        };
+
+                    // current register
+                    int psIndex = i + 256;
+                    float curRegisterPS[4] =
+                        {
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[psIndex].v[0]),
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[psIndex].v[1]),
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[psIndex].v[2]),
+                            ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[psIndex].v[3]),
+                        };
+
+                    g_video->m_d3dDevice->SetVertexShaderConstantF(i, curRegisterVS, 1);
+                    g_video->m_d3dDevice->SetPixelShaderConstantF(i, curRegisterPS, 1);
+                }
+
                 if (pendingDraw->m_type == GuestD3D::PrimitiveType::XD3DPT_QUADLIST)
                 {
                     int trianglePrimCount = (pendingDraw->m_primCount * 6) / 3;
@@ -260,23 +288,8 @@ namespace VideoHooks
 
                     // PrintCurrentVertexDecl(true);
 
-                    // copy first 8 registers from guest to host (debug)
-                    for (int i = 0; i < 8; i++)
-                    {
-                        // current register
-                        float curRegister[4] =
-                            {
-                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].x),
-                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].y),
-                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].z),
-                                ByteSwapFloat(g_guestDevice.load()->m_constants.Alu[i].w),
-                            };
-
-                        g_video->m_d3dDevice->SetVertexShaderConstantF(i, curRegister, 1);
-                    }
-
                     // print current shader
-                    Log::Info("EndVertices", "Requesting shader -> ", Shaders::g_pPixelShaderNames[Shaders::g_curShaderKey]);
+                    // Log::Info("EndVertices", "Requesting shader -> ", Shaders::g_pPixelShaderNames[Shaders::g_curShaderKey]);
 
                     g_video->m_d3dDevice->DrawPrimitiveUP(ConvertGuestPrimType(pendingDraw->m_type), trianglePrimCount, quadPreparedData, pendingDraw->m_stride);
                     g_heap->Free(quadPreparedData);
@@ -347,7 +360,7 @@ namespace VideoHooks
     {
     }
 
-    void Guest_SetTexture(GuestDevice *p_device, uint32_t p_sampler, renderengine::D3DBaseTexture *p_texture)
+    void Guest_SetTexture(GuestDevice *p_device, uint32_t p_sampler, GuestBaseTexture *p_texture)
     {
         auto it = g_textureMap.find(p_texture->Identifier);
 
@@ -381,21 +394,92 @@ namespace VideoHooks
         // g_video->m_d3dDevice->Clear(0, nullptr, Flags, 0xFF000000, Z, 0);
     }
 
+    static int texCount = 0;
+
     PPC_FUNC_IMPL(__imp__sub_829FF6D0);
     void Guest_InitTexture(rw::Resource *p_resource, const TextureParameters *p_params)
     {
         __imp__sub_829FF6D0(*PPCLocal::g_ppcContext, Memory::g_base);
 
-        auto texture = Memory::Translate<renderengine::Texture *>(PPCLocal::g_ppcContext->r3.u32);
+        auto texture = Memory::Translate<GuestBaseTexture *>(PPCLocal::g_ppcContext->r3.u32);
+
+        if (p_params->address != 0 && p_params->format == GuestD3D::PixelFormat::PIXELFORMAT_DXT5 && p_params->mipLevels == 1)
+        {
+            // get texture
+            XTexHelper texHelper;
+
+            auto rawTexelData = Memory::Translate<uint8_t *>(p_params->address);
+
+            // base address
+            auto constants = ((GuestBaseTexture *)texture)->GetBitField();
+
+            // Log::Info("Guest_InitTexture", "Base address: ", (void *)(Memory::Translate<uint8_t *>(constants.BaseAddress << 12)));
+            Log::Info("Guest_InitTexture", "Params address: ", (void *)rawTexelData);
+
+            // dump into vec
+            // std::vector<uint8_t> data(rawTexelData, rawTexelData + p_params->width * p_params->height * 4);
+
+            Log::Info("Guest_InitTexture", "Flags -> ", (uint32_t)p_params->flags,
+                      " Width -> ", (uint32_t)p_params->width,
+                      " Height -> ", (uint32_t)p_params->height,
+                      " Depth -> ", (uint32_t)p_params->depth,
+                      " MipLevels -> ", (uint32_t)p_params->mipLevels,
+                      " Format -> ", (uint32_t)p_params->format,
+                      " Address -> ", (uint32_t)p_params->address);
+
+            Log::Info("Guest_InitTexture", "Texture Dimension -> ", (uint32_t)constants.Dimension);
+
+            if (constants.Dimension == 3)
+            {
+                Log::Info("Guest_InitTexture", "Texture is a cube map.");
+                DebugBreak();
+                return;
+            }
+
+            // 16384
+
+            auto textureData = texHelper.GetTextureData((GuestBaseTexture *)texture, rawTexelData);
+
+            auto d3d9Tex = texHelper.ConvertToDXTexture(g_video->m_d3dDevice, textureData);
+
+            /*
+            std::string texName = "tex_dump_" + std::to_string(texCount) + ".bin";
+
+            // dump tex to file
+            std::ofstream outFile(texName, std::ios::binary | std::ios::trunc);
+
+            outFile.write(reinterpret_cast<const char *>(rawTexelData), textureData.slicePitch);
+            outFile.close();*/
+
+            auto convertGuestTex = new GuestTexture;
+
+            convertGuestTex->texture = d3d9Tex;
+            convertGuestTex->pitch = textureData.rowPitch;
+            convertGuestTex->height = textureData.height;
+
+            texture->Identifier.set(g_textureMap.size() + 1);
+
+            Log::Info("Guest_InitTexture", "Converted texture -> ", textureData.width,
+                      " height: ", textureData.height,
+                      " blockWidth: ", textureData.widthInBlocks,
+                      " blockHeight: ", textureData.heightInBlocks,
+                      " rowPitch: ", textureData.rowPitch,
+                      " slicePitch: ", textureData.slicePitch, " Key: ", texture->Identifier);
+
+            g_textureMap[texture->Identifier] = convertGuestTex;
+
+            // texHelper.WriteToDDS(textureData, std::to_string(texture->Identifier) + "_converted.dds");
+
+            texCount++;
+
+            return;
+        }
 
         auto guestTex = new GuestTexture;
-
         auto d3dFormat = GetD3DFormat(p_params->format);
 
         if (d3dFormat == 0)
-        {
             Log::Info("Texture_Initialize", "Invalid format -> ", (unsigned long)p_params->format, ", Texture -> ", texture->Identifier);
-        }
 
         // Lock and Unlock are broken as of right now
         if (d3dFormat != D3DFMT_L8)
@@ -428,7 +512,7 @@ namespace VideoHooks
     }
 
     PPC_FUNC_IMPL(__imp__sub_823BF740);
-    void Guest_LockSurface(renderengine::Texture *p_texture) // arguments arent reliable on guest hook here
+    void Guest_LockSurface(GuestBaseTexture *p_texture) // arguments arent reliable on guest hook here
     {
         uint64_t AsyncBlock = PPCLocal::g_ppcContext->r6.u64;
         uint32_t *Level = Memory::Translate<uint32_t *>(PPCLocal::g_ppcContext->r8.u32);
@@ -450,6 +534,11 @@ namespace VideoHooks
 
         D3DSURFACE_DESC desc;
         guestTex->texture->GetLevelDesc(mipLevel, &desc);
+
+        if (desc.Format == D3DFMT_DXT5)
+        {
+            DebugBreak();
+        }
 
         if (desc.Format == D3DFMT_DXT1 || desc.Format == D3DFMT_DXT3 || desc.Format == D3DFMT_DXT5)
         {
@@ -476,7 +565,7 @@ namespace VideoHooks
     }
 
     PPC_FUNC_IMPL(__imp__sub_82325F50);
-    void Guest_UnlockResource(renderengine::D3DResource *p_resource)
+    void Guest_UnlockResource(GuestResource *p_resource)
     {
         auto it = g_textureMap.find(p_resource->Identifier);
         if (it == g_textureMap.end() || p_resource->Identifier == 0)
@@ -554,6 +643,73 @@ namespace VideoHooks
     {
     }
 
+    // Start of State Setting
+    void Guest_SetRasterizerState(renderengine::RasterizerState *p_state)
+    {
+        g_video->m_d3dDevice->SetRenderState(D3DRS_CULLMODE, GetCullMode(p_state->m_cullMode));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_FILLMODE, GetFillMode(p_state->m_fillMode));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, p_state->m_scissorTestEnable);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, p_state->m_slopeScaleDepthBias);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_DEPTHBIAS, p_state->m_depthBias);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, p_state->m_multiSampleAntiAlias);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_MULTISAMPLEMASK, p_state->m_multiSampleMask);
+
+        // g_video->m_d3dDevice->SetRenderState(D3DRS_VIEWPORTENABLE, p_state->m_viewportEnable); //will need to be emulated
+        // g_video->m_d3dDevice->SetRenderState(D3DRS_HALFPIXELOFFSET, p_state->m_halfPixelOffset); // will need to be emulated
+        // g_video->m_d3dDevice->SetRenderState(D3DRS_PRIMITIVETESTENABLE, p_state->m_primitiveTestEnable); // will need to be emulated
+
+        if (p_state->m_primitiveResetEnable)
+        {
+            // g_video->m_d3dDevice->SetRenderState(D3DRS_PRIMITIVERESETINDEX, p_state->m_primitiveResetIndex); // will need to be emulated
+        }
+    }
+
+    void Guest_SetSamplerState(renderengine::SamplerState *p_state, uint32_t p_sampler)
+    {
+        auto samplerPack = p_state->GetSwappedPack();
+
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_ADDRESSU, GetTexAddress(samplerPack.m_addressU));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_ADDRESSV, GetTexAddress(samplerPack.m_addressV));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_ADDRESSW, GetTexAddress(samplerPack.m_addressW));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_BORDERCOLOR, samplerPack.m_borderColor);
+
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_MIPFILTER, GetTexFilter(samplerPack.m_mipfilter));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_MINFILTER, GetTexFilter(samplerPack.m_minfilter));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_MAGFILTER, GetTexFilter(samplerPack.m_magfilter));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_MAXANISOTROPY, samplerPack.m_maxanisotropy);
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_MIPMAPLODBIAS, static_cast<DWORD>(p_state->m_mipmaplodBias));
+        g_video->m_d3dDevice->SetSamplerState(p_sampler, D3DSAMP_MAXMIPLEVEL, samplerPack.m_maxmiplevel);
+
+        // missing a few cases in here.
+        // clamp policy, hgradientexpbias, vgradientexpbias, trilinear threshold, forcebcwtomax
+    }
+
+    void Guest_SetBlendState(renderengine::BlendStatePack *p_state)
+    {
+        // byte swap first blend state
+        GuestD3D::BlendState state{};
+        state.m_dword = ByteSwap(p_state->m_blendStates[0].m_dword);
+
+        // we dont have per render target blending in d3d9
+        // parse first state
+        g_video->m_d3dDevice->SetRenderState(D3DRS_SRCBLEND, GetBlend(state.m_srcBlend));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_BLENDOP, GetBlendOp(state.m_blendOp));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_DESTBLEND, GetBlend(state.m_destBlend));
+
+        g_video->m_d3dDevice->SetRenderState(D3DRS_SRCBLENDALPHA, GetBlend(state.m_srcBlendAlpha));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_BLENDOPALPHA, GetBlendOp(state.m_blendOpAlpha));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_DESTBLENDALPHA, GetBlend(state.m_destBlendAlpha));
+
+        g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE, p_state->m_colorWriteEnable);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE1, p_state->m_colorWriteEnable1);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE2, p_state->m_colorWriteEnable2);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_COLORWRITEENABLE3, p_state->m_colorWriteEnable3);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_BLENDFACTOR, p_state->m_blendFactor);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_ALPHATESTENABLE, p_state->m_alphaTestEnable);
+        g_video->m_d3dDevice->SetRenderState(D3DRS_ALPHAFUNC, GetCmpFunc(p_state->m_alphaFunc));
+        g_video->m_d3dDevice->SetRenderState(D3DRS_ALPHAREF, p_state->m_alphaRef);
+    }
+
     PPC_FUNC_IMPL(__imp__sub_829EF3B8);
     void Guest_AsyncOp_Open(void *, const char *p_filePath)
     {
@@ -608,6 +764,11 @@ GUEST_FUNCTION_HOOK(sub_829FF6D0, VideoHooks::Guest_InitTexture)
 GUEST_FUNCTION_HOOK(sub_823A6BC0, VideoHooks::Guest_LockResource)
 GUEST_FUNCTION_HOOK(sub_82325F50, VideoHooks::Guest_UnlockResource)
 GUEST_FUNCTION_HOOK(sub_823BF740, VideoHooks::Guest_LockSurface)
+
+// State related functions
+GUEST_FUNCTION_HOOK(sub_8235D5C0, VideoHooks::Guest_SetRasterizerState)
+GUEST_FUNCTION_HOOK(sub_82365518, VideoHooks::Guest_SetSamplerState)
+GUEST_FUNCTION_HOOK(sub_82360DB8, VideoHooks::Guest_SetBlendState)
 
 // Game specific hacks
 GUEST_FUNCTION_HOOK(sub_8236C5F8, VideoHooks::Guest_RwMemCopy)

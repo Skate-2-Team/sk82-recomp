@@ -57,6 +57,9 @@ add_executable(${TARGET_NAME}
     src/graphics/shaders.cpp
     src/graphics/shaders.h
 
+    src/graphics/xtexhelper.cpp
+    src/graphics/xtexhelper.h
+
     src/loader.cpp
     src/loader.h
 

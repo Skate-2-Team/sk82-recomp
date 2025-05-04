@@ -17,6 +17,9 @@
 #include "shaders.h"
 #include "game/game_structs.h"
 #include "d3d_context.h"
+#include "xtexhelper.h"
+
+#include "video.h"
 
 namespace VideoHooks
 {
@@ -121,7 +124,7 @@ namespace VideoHooks
         uint32_t m_primCount;
         void *m_vertexBuffer;
 
-        PendingDraw() : m_type(GuestD3D::PrimitiveType::XD3DPT_FORCE_DWORD),
+        PendingDraw() : m_type(GuestD3D::PrimitiveType::XD3DPT_TRIANGLELIST),
                         m_vertexCount(0),
                         m_stride(0),
                         m_vertexBuffer(nullptr),
@@ -149,6 +152,8 @@ namespace VideoHooks
     inline void *globalBuffer = nullptr;
     inline int lastSize = 0;
     inline int g_curTextureKey = 0;
+
+    inline LPDIRECT3DTEXTURE9 g_testTexture = nullptr;
 
     inline std::atomic<GuestDevice *> g_guestDevice = nullptr;
 

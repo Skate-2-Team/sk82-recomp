@@ -7,20 +7,41 @@
 #include "xex.h"
 #include "log.h"
 
-#define XD3DCLEAR_TARGET0 0x00000001l                                                                        /* Clear target surface 0 */
-#define XD3DCLEAR_TARGET1 0x00000002l                                                                        /* Clear target surface 1 */
-#define XD3DCLEAR_TARGET2 0x00000004l                                                                        /* Clear target surface 2 */
-#define XD3DCLEAR_TARGET3 0x00000008l                                                                        /* Clear target surface 3 */
-#define XD3DCLEAR_ALLTARGETS (XD3DCLEAR_TARGET0 | XD3DCLEAR_TARGET1 | XD3DCLEAR_TARGET2 | XD3DCLEAR_TARGET3) /* Clear all target surfaces */
-#define XD3DCLEAR_TARGET XD3DCLEAR_ALLTARGETS
-
-#define XD3DCLEAR_ZBUFFER 0x00000010l        /* Clear target z buffer */
-#define XD3DCLEAR_STENCIL 0x00000020l        /* Clear stencil planes */
-#define XD3DCLEAR_HISTENCIL_CULL 0x00000040l /* Clear hi-stencil to cull all pixels */
-#define XD3DCLEAR_HISTENCIL_PASS 0x00000080l /* Clear hi-stencil to pass all pixels */
-
 namespace GuestD3D
 {
+    enum ClearTypes : uint32_t
+    {
+        CLEAR_TARGET0 = 0x00000001l,
+        CLEAR_TARGET1 = 0x00000002l,
+        CLEAR_TARGET2 = 0x00000004l,
+        CLEAR_TARGET3 = 0x00000008l,
+        CLEAR_ALLTARGETS = (CLEAR_TARGET0 | CLEAR_TARGET1 | CLEAR_TARGET2 | CLEAR_TARGET3),
+        CLEAR_ZBUFFER = 0x00000010l,
+        CLEAR_STENCIL = 0x00000020l,
+        CLEAR_HISTENCIL_CULL = 0x00000040l,
+        CLEAR_HISTENCIL_PASS = 0x00000080l,
+    };
+
+    enum FilterType : uint32_t
+    {
+        D3DTEXF_NONE = 0x2,
+        D3DTEXF_POINT = 0x0,
+        D3DTEXF_LINEAR = 0x1,
+        D3DTEXF_ANISOTROPIC = 0x4,
+    };
+
+    enum TextureAddress : uint32_t
+    {
+        D3DTADDRESS_WRAP = 0x0,
+        D3DTADDRESS_MIRROR = 0x1,
+        D3DTADDRESS_CLAMP = 0x2,
+        D3DTADDRESS_MIRRORONCE = 0x3,
+        D3DTADDRESS_BORDER_HALF = 0x4,
+        D3DTADDRESS_MIRRORONCE_BORDER_HALF = 0x5,
+        D3DTADDRESS_BORDER = 0x6,
+        D3DTADDRESS_MIRRORONCE_BORDER = 0x7,
+    };
+
     enum PixelFormat : uint32_t
     {
         PIXELFORMAT_DXT1 = 0x1A200152,
@@ -203,15 +224,15 @@ namespace GuestD3D
     {
         struct
         {
-            unsigned __int32 SrcBlend : 5;
-            unsigned __int32 BlendOp : 3;
-            unsigned __int32 DestBlend : 8;
-            unsigned __int32 SrcBlendAlpha : 5;
-            unsigned __int32 BlendOpAlpha : 3;
-            unsigned __int32 DestBlendAlpha : 8;
+            uint32_t m_srcBlend : 5;
+            uint32_t m_blendOp : 3;
+            uint32_t m_destBlend : 8;
+            uint32_t m_srcBlendAlpha : 5;
+            uint32_t m_blendOpAlpha : 3;
+            uint32_t m_destBlendAlpha : 8;
         };
 
-        uint32_t dword;
+        uint32_t m_dword;
     };
 
     enum CullMode : __int32
@@ -219,7 +240,6 @@ namespace GuestD3D
         D3DCULL_NONE = 0x0,
         D3DCULL_CW = 0x2,
         D3DCULL_CCW = 0x6,
-        D3DCULL_FORCE_DWORD = 0x7FFFFFFF,
     };
 
     enum FillMode : uint32_t
@@ -227,7 +247,6 @@ namespace GuestD3D
         D3DFILL_POINT = 0x1,
         D3DFILL_WIREFRAME = 0x25,
         D3DFILL_SOLID = 0x0,
-        D3DFILL_FORCE_DWORD = 0x7FFFFFFF,
     };
 
     enum Blend : uint32_t
@@ -247,7 +266,6 @@ namespace GuestD3D
         D3DBLEND_CONSTANTALPHA = 0xE,
         D3DBLEND_INVCONSTANTALPHA = 0xF,
         D3DBLEND_SRCALPHASAT = 0x10,
-        D3DBLEND_FORCE_DWORD = 0x7FFFFFFF,
     };
 
     enum BlendOp : uint32_t
@@ -257,7 +275,6 @@ namespace GuestD3D
         D3DBLENDOP_MIN = 0x2,
         D3DBLENDOP_MAX = 0x3,
         D3DBLENDOP_REVSUBTRACT = 0x4,
-        D3DBLENDOP_FORCE_DWORD = 0x7FFFFFFF,
     };
 
     enum StencilOp : uint32_t
@@ -270,7 +287,6 @@ namespace GuestD3D
         D3DSTENCILOP_INVERT = 0x5,
         D3DSTENCILOP_INCR = 0x6,
         D3DSTENCILOP_DECR = 0x7,
-        D3DSTENCILOP_FORCE_DWORD = 0x7FFFFFFF,
     };
 
     enum CmpFunc : uint32_t
@@ -283,7 +299,6 @@ namespace GuestD3D
         D3DCMP_NOTEQUAL = 0x5,
         D3DCMP_GREATEREQUAL = 0x6,
         D3DCMP_ALWAYS = 0x7,
-        D3DCMP_FORCE_DWORD = 0x7FFFFFFF,
     };
 
     typedef D3DDECLUSAGE DeclUsage;
@@ -516,35 +531,34 @@ namespace GuestD3D
         XD3DPT_TRIANGLESTRIP = 0x6,
         XD3DPT_RECTLIST = 0x8,
         XD3DPT_QUADLIST = 0xD,
-        XD3DPT_FORCE_DWORD = 0x7FFFFFFF,
     };
 
-    struct GPUTEXTURESIZE_1D
+    struct GpuTextureSize1D
     {
         uint32_t Width : 24;
     };
 
-    struct GPUTEXTURESIZE_2D
+    struct GpuTextureSize2D
     {
         uint32_t Width : 13;
         uint32_t Height : 13;
     };
 
-    struct GPUTEXTURESIZE_3D
+    struct GpuTextureSize3D
     {
         uint32_t Width : 11;
         uint32_t Height : 11;
         uint32_t Depth : 10;
     };
 
-    struct GPUTEXTURESIZE_STACK
+    struct GpuTextureSizeStack
     {
         uint32_t Width : 13;
         uint32_t Height : 13;
         uint32_t Depth : 6;
     };
 
-    union GPUTEXTURE_FETCH_CONSTANT
+    union GPUTextureFetchConstants
     {
         struct
         {
@@ -571,10 +585,10 @@ namespace GuestD3D
 
             union
             {
-                GPUTEXTURESIZE_1D OneD;
-                GPUTEXTURESIZE_2D TwoD;
-                GPUTEXTURESIZE_3D ThreeD;
-                GPUTEXTURESIZE_STACK Stack;
+                GpuTextureSize1D OneD;
+                GpuTextureSize2D TwoD;
+                GpuTextureSize3D ThreeD;
+                GpuTextureSizeStack Stack;
             } Size;
 
             uint32_t NumFormat : 1;
@@ -610,29 +624,6 @@ namespace GuestD3D
         uint32_t dword[6];
     };
 
-    union GPUVERTEX_FETCH_CONSTANT
-    {
-        struct
-        {
-            uint32_t Type : 2;
-            uint32_t BaseAddress : 30;
-            uint32_t Endian : 2;
-            uint32_t Size : 24;
-            uint32_t AddressClamp : 1;
-            uint32_t : 1;
-            uint32_t RequestSize : 2;
-            uint32_t ClampDisable : 2;
-        };
-
-        uint32_t dword[2];
-    };
-
-    union GPUFETCH_CONSTANT
-    {
-        GPUTEXTURE_FETCH_CONSTANT Texture;
-        GPUVERTEX_FETCH_CONSTANT Vertex[3];
-    };
-
     struct Vector4
     {
         union
@@ -652,45 +643,19 @@ namespace GuestD3D
 
     struct TagCollection
     {
-        uint64_t m_Mask[5];
+        uint64_t m_mask[5];
+    };
+
+    struct FetchStruct
+    {
+        uint32_t pad[6];
     };
 
     struct Constants
     {
-        union
-        {
-            GPUFETCH_CONSTANT Fetch[32];
-
-            struct
-            {
-                GPUTEXTURE_FETCH_CONSTANT TextureFetch[26];
-                GPUVERTEX_FETCH_CONSTANT VertexFetch[18];
-            };
-        };
-
-        union
-        {
-            Vector4 Alu[512];
-
-            struct
-            {
-                Vector4 VertexShaderF[256];
-                Vector4 PixelShaderF[256];
-            };
-        };
-
-        union
-        {
-            unsigned int Flow[40];
-
-            struct
-            {
-                unsigned int VertexShaderB[4];
-                unsigned int PixelShaderB[4];
-                unsigned int VertexShaderI[16];
-                unsigned int PixelShaderI[16];
-            };
-        };
+        FetchStruct Fetch[32];
+        Vector4 Alu[512];
+        unsigned int Flow[40];
     };
 
     struct VertexElement
@@ -1458,7 +1423,7 @@ inline D3DPRIMITIVETYPE ConvertGuestPrimType(GuestD3D::PrimitiveType guestType)
     default:
         Log::Error("ConvertGuestPrimType", "Unknown primitive type: ", guestType);
         DebugBreak();
-        return D3DPT_FORCE_DWORD;
+        return (D3DPRIMITIVETYPE)-1;
     }
 }
 
@@ -1695,6 +1660,61 @@ inline int GetPrimitiveCount(int vertexCount, GuestD3D::PrimitiveType primType)
     }
 }
 
+inline uint32_t GetTexFilter(uint32_t p_value)
+{
+    uint32_t returnVal;
+
+    switch (p_value)
+    {
+    case GuestD3D::D3DTEXF_NONE:
+        returnVal = D3DTEXF_NONE;
+        break;
+    case GuestD3D::D3DTEXF_POINT:
+        returnVal = D3DTEXF_POINT;
+        break;
+    case GuestD3D::D3DTEXF_LINEAR:
+        returnVal = D3DTEXF_LINEAR;
+        break;
+    case GuestD3D::D3DTEXF_ANISOTROPIC:
+        returnVal = D3DTEXF_ANISOTROPIC;
+        break;
+    case 8:
+        returnVal = D3DTEXF_LINEAR; // who knows how 8 is even a possible value
+        break;
+    default:
+        assert(false);
+        break;
+    }
+
+    return returnVal;
+}
+
+inline uint32_t GetTexAddress(uint32_t p_value)
+{
+    uint32_t returnVal;
+
+    switch (p_value)
+    {
+    case GuestD3D::D3DTADDRESS_WRAP:
+        returnVal = D3DTADDRESS_WRAP;
+        break;
+    case GuestD3D::D3DTADDRESS_MIRROR:
+        returnVal = D3DTADDRESS_MIRROR;
+        break;
+    case GuestD3D::D3DTADDRESS_CLAMP:
+        returnVal = D3DTADDRESS_CLAMP;
+        break;
+    case GuestD3D::D3DTADDRESS_BORDER:
+        returnVal = D3DTADDRESS_BORDER;
+        break;
+    default:
+        assert(false);
+        break;
+    }
+
+    return returnVal;
+}
+
 struct GuestResource
 {
     be<uint32_t> Common;
@@ -1708,11 +1728,25 @@ struct GuestResource
 struct GuestBaseTexture : GuestResource
 {
     be<uint32_t> MipFlush;
-    GuestD3D::GPUTEXTURE_FETCH_CONSTANT Format;
+    GuestD3D::GPUTextureFetchConstants Format;
 
     uint32_t GetLevelCount()
     {
         return ((Format.dword[4] >> 6) & 0xF) + 1;
+    }
+
+    GuestD3D::GPUTextureFetchConstants GetBitField()
+    {
+        GuestD3D::GPUTextureFetchConstants bitField;
+
+        bitField.dword[0] = ByteSwap(Format.dword[0]);
+        bitField.dword[1] = ByteSwap(Format.dword[1]);
+        bitField.dword[2] = ByteSwap(Format.dword[2]);
+        bitField.dword[3] = ByteSwap(Format.dword[3]);
+        bitField.dword[4] = ByteSwap(Format.dword[4]);
+        bitField.dword[5] = ByteSwap(Format.dword[5]);
+
+        return bitField;
     }
 };
 
@@ -1765,11 +1799,7 @@ struct GuestDeviceBase
 {
     GuestD3D::TagCollection m_pending;
 
-    be<uint64_t> m_predicated_PendingMask2;
-    be<uint32_t> m_pRing;
-    be<uint32_t> m_pRingLimit;
-    be<uint32_t> m_pRingGuarantee;
-    be<uint32_t> m_referenceCount;
+    PADDING(24, 0);
 
     be<uint32_t> m_setRenderStateFunctions[101];
     be<uint32_t> m_setSamplerStateFunctions[20];

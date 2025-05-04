@@ -83,6 +83,22 @@ namespace Shaders
         ID3DBlob *pPSBlob = nullptr;
         CompileShaderFromFile(L"shaders//vp6.fx", "defaultPS", "ps_3_0", &pPSBlob);
 
+        ID3DBlob *passThroughPSBlob = nullptr;
+        CompileShaderFromFile(L"shaders//passthrough.fx", "PS_Main", "ps_3_0", &passThroughPSBlob);
+        if (passThroughPSBlob)
+        {
+            g_shaderErrorCount += g_video->m_d3dDevice->CreatePixelShader((const DWORD *)passThroughPSBlob->GetBufferPointer(), &g_passThroughPs);
+            passThroughPSBlob->Release();
+        }
+
+        ID3DBlob *passThroughVSBlob = nullptr;
+        CompileShaderFromFile(L"shaders//passthrough.fx", "VS_Main", "vs_3_0", &passThroughVSBlob);
+        if (passThroughVSBlob)
+        {
+            g_shaderErrorCount += g_video->m_d3dDevice->CreateVertexShader((const DWORD *)passThroughVSBlob->GetBufferPointer(), &g_passThroughVs);
+            passThroughVSBlob->Release();
+        }
+
         g_isShaderLoaded = (g_shaderErrorCount == 0);
     }
 

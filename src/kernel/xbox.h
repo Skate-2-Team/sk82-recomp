@@ -20,7 +20,6 @@
 #define XCONTENTDEVICETYPE_MU 2
 
 // Direct reflection of XInput structures
-
 #define XAMINPUT_DEVTYPE_GAMEPAD 0x01
 #define XAMINPUT_DEVSUBTYPE_GAMEPAD 0x01
 
