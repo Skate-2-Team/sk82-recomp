@@ -2,9 +2,11 @@
 #include "kernel/function.h"
 #include "log.h"
 #include <cpu/guest_thread.h>
+#include <kernel/hooks/xma.h>
 #include <SDL3/SDL.h>
 #include "kernel/heap.h"
 #include "kernel/memory.h"
+#include "sdlwrap.h"
 
 #define AUDIO_DRIVER_KEY (uint32_t)('SKATE')
 
@@ -14,7 +16,8 @@ static std::unique_ptr<std::thread> g_audioThread{};
 
 namespace AudioHooks
 {
-    // Needs to be properly implemented
+    inline SdlAudio *g_sdlAudio{};
+
     static void AudioThread()
     {
         std::wstring threadName = L"XAudioClientThread";
@@ -27,7 +30,6 @@ namespace AudioHooks
             // just keep calling the callback
             ctx.ppcContext.r3.u32 = g_clientCallbackParam;
             g_clientCallback(ctx.ppcContext, Memory::g_base);
-
             // sleep 1 ms chrono
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -42,6 +44,9 @@ namespace AudioHooks
         *pClientParam = param;
         g_clientCallbackParam = Memory::MapVirtual(pClientParam);
         g_clientCallback = callback;
+
+        SDL_AudioSpec spec{SDL_AUDIO_F32, 2, 48000};
+        g_sdlAudio = new SdlAudio(spec, SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK);
 
         g_audioThread = std::make_unique<std::thread>(AudioThread);
     }

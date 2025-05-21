@@ -10,6 +10,8 @@ set(EXTERNAL_ROOT ${CMAKE_SOURCE_DIR}/external)
 # include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_SOURCE_DIR}/external)
+include_directories(${CMAKE_SOURCE_DIR}/external/ffmpeg/include)
+link_directories(${CMAKE_SOURCE_DIR}/external/ffmpeg/lib)
 
 # COMPILE O1HEAP
 add_library(o1heap STATIC ${EXTERNAL_ROOT}/o1heap/o1heap.c)
@@ -49,6 +51,7 @@ add_executable(${TARGET_NAME}
     src/kernel/hooks/xgpu.cpp
     src/kernel/hooks/xkernel.cpp
     src/kernel/hooks/xam.cpp
+    src/kernel/hooks/xma.cpp
     src/kernel/hooks/xmem.cpp
     src/kernel/hooks/xthreading.cpp
 
@@ -79,6 +82,9 @@ target_link_libraries(${TARGET_NAME}
     o1heap
     d3dcompiler
     xxHash::xxhash
+    ${CMAKE_SOURCE_DIR}/external/ffmpeg/lib/avcodec.lib
+    ${CMAKE_SOURCE_DIR}/external/ffmpeg/lib/avutil.lib
+    ${CMAKE_SOURCE_DIR}/external/ffmpeg/lib/avformat.lib
 )
 
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 23)
